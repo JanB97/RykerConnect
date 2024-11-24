@@ -1,0 +1,19 @@
+<!DOCTYPE resources [
+    <!ENTITY appname "RykerConnect">
+    <!ENTITY service_name "RykerConnectMediaService">
+    ]>
+
+<resources>
+    <string name="app_name">&appname;</string>
+    <string name="service_name">&service_name;</string>
+    <string name="companion_service_name">CompanionDeviceService</string>
+    <string name="str_main_activity_top">&appname; Setup</string>
+    <string name="str_test">Setting up the &appname; App and Service for you!</string>
+    <string name="str_test2">We need some Permissions for the App to work, please allow the following permissions…</string>
+    <string name="str_main_device">Ryker - Main unit</string>
+    <string name="str_sel_device">Select Device</string>
+
+    <string name="str_local_notificationlistener_intent">de.chaostheorybot.rykerconnect.services.NOTIFICATION_LISTENER</string>
+    <string name="str_local_spotifylistener_intent_metadata">de.chaostheorybot.rykerconnect.services.SPOTIFY_LISTENER.METADATA</string>
+    <string name="str_local_spotifylistener_intent_playstate">de.chaostheorybot.rykerconnect.services.SPOTIFY_LISTENER.PLAYSTATE</string>
+</resources>
