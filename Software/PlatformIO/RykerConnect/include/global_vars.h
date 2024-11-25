@@ -7,7 +7,7 @@
 #include <Preferences.h>
 #include <mcp9808.h>
 
-#define DEBUG
+//#define DEBUG
 #define SPLASHSCREEN
 
 #define VERSION 0x0001
