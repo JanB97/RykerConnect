@@ -40,6 +40,9 @@ class RykerConnectStore(private val context: Context) {
         private val BLE_MAC_TOKEN = stringPreferencesKey("ble_mac")
         private val BLE_APPEAR_TOKEN = booleanPreferencesKey("ble_appear")
         //endregion
+        //region SERVICE SETTINGS
+        private val MUSIC_PLAYER_TOKEN = intPreferencesKey("music_player")
+        //endregion
     }
 
     //---------------------------------
@@ -69,6 +72,12 @@ class RykerConnectStore(private val context: Context) {
     //region BLE
     val getBLEMACToken: Flow<String> = context.dataStore.data.map { it[BLE_MAC_TOKEN] ?: "" }
     val getBLEAppearToken: Flow<Boolean> = context.dataStore.data.map { it[BLE_APPEAR_TOKEN] ?: false }
+    //endregion
+    //region MUSIC PLAYER
+    val getMusicPlayerToken: Flow<MusicService> = context.dataStore.data.map { preferences ->
+        val serviceId = preferences[MUSIC_PLAYER_TOKEN] ?: MusicService.SPOTIFY.id // Default to Spotify ID
+        MusicService.fromId(serviceId) ?: MusicService.SPOTIFY // Fallback to Spotify if ID is invalid
+         }
     //endregion
 
 
@@ -118,6 +127,11 @@ class RykerConnectStore(private val context: Context) {
     suspend fun saveMediaPlayBackPosition(token: Int){
         context.dataStore.edit { preferences ->
             preferences[MEDIA_PLAYBACK_POSITION_TOKEN] = token.toInt()
+        }
+    }
+    suspend fun saveMediaPlay(token: Int){
+        context.dataStore.edit { preferences ->
+            preferences[MUSIC_PLAYER_TOKEN] = token.toInt()
         }
     }
     suspend fun clearMediaSaves(){
@@ -175,5 +189,29 @@ class RykerConnectStore(private val context: Context) {
     suspend fun getBLEAppear(): Boolean? {
         return context.dataStore.data.first()[BLE_APPEAR_TOKEN]
     }
+    suspend fun getInterComMAC(): String?{
+        return context.dataStore.data.first()[SEL_MAC_TOKEN]
+    }
 
+    suspend fun getMusicPlayer(): MusicService? {
+        val serviceId = context.dataStore.data.first()[MUSIC_PLAYER_TOKEN] ?: MusicService.SPOTIFY.id
+        return MusicService.fromId(serviceId)
+    }
+
+    suspend fun saveMusicPlayer(service: MusicService) {
+        context.dataStore.edit { preferences ->
+            preferences[MUSIC_PLAYER_TOKEN] = service.id
+        }
+    }
+
+}
+
+enum class MusicService(val id: Int, val displayName: String) {
+    SPOTIFY(0, "Spotify"),
+    YOUTUBE_MUSIC(1, "YouTube Music");
+
+    companion object {
+        fun fromId(id: Int): MusicService? = entries.find { it.id == id }
+        fun fromDisplayName(displayName: String): MusicService? = entries.find { it.displayName == displayName}
+    }
 }

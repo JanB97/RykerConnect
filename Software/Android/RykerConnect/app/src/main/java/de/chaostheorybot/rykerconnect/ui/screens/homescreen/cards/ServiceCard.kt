@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
 import de.chaostheorybot.rykerconnect.R
 
 @Composable
-fun ServiceCard() {
+fun ServiceCard(customizeClick: () -> Unit) {
 
     var service by remember {
         mutableStateOf(false)
@@ -101,7 +101,7 @@ fun ServiceCard() {
                 ) {
                     Text(text = "${if (service) "Stop" else "Start"} Service")
                 }
-                Button(onClick = { /*TODO*/ }) {
+                Button(onClick = { customizeClick() }) {
                     Text(text = "Customize")
                 }
             }

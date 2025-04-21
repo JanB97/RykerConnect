@@ -1,5 +1,6 @@
 package de.chaostheorybot.rykerconnect
 
+import NetworkTypeMonitor
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothDevice
@@ -42,6 +43,7 @@ import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import de.chaostheorybot.rykerconnect.logic.BLEDeviceConnection
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getDevice
 import de.chaostheorybot.rykerconnect.ui.screens.homescreen.HomeScreen
+import de.chaostheorybot.rykerconnect.ui.screens.servicescreen.CustomizeServiceScreen
 import de.chaostheorybot.rykerconnect.ui.screens.setupscreen.SetupScreen
 import de.chaostheorybot.rykerconnect.ui.theme.RykerConnectTheme
 import kotlinx.coroutines.flow.firstOrNull
@@ -61,6 +63,10 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val store = RykerConnectStore(this)
+
+        //var networkTypeMonitor = NetworkTypeMonitor(this)
+        //networkTypeMonitor.startMonitoring()
+
         setContent {
             val view = LocalView.current
             val window = (view.context as Activity).window
@@ -113,7 +119,7 @@ class MainActivity : ComponentActivity() {
                                 )
                             }) {
                             val sColor = MaterialTheme.colorScheme.surface.toArgb()
-                            HomeScreen(store = store, companion = { setupCompanion(store) })
+                            HomeScreen(store = store,nav = navController, companion = { setupCompanion(store) })
                             if (!view.isInEditMode) {
                                 SideEffect {
                                     window.statusBarColor = sColor
@@ -121,6 +127,26 @@ class MainActivity : ComponentActivity() {
                             }
 
                         }
+                        composable(route = Screen.ServiceScreen.route, enterTransition = {
+                            return@composable slideIntoContainer(
+                                AnimatedContentTransitionScope.SlideDirection.Up, tween(600)
+                            )
+                        },
+                            popExitTransition = {
+                                return@composable slideOutOfContainer(
+                                    AnimatedContentTransitionScope.SlideDirection.Down, tween(600)
+                                )
+                            }) {
+                            val sColor = MaterialTheme.colorScheme.surface.toArgb()
+                            CustomizeServiceScreen(nav = navController, store = store)
+                            if (!view.isInEditMode) {
+                                SideEffect {
+                                    window.statusBarColor = sColor
+                                }
+                            }
+
+                        }
+
                     }
                     //SetupScreen()
                     //HomeScreen()

@@ -40,8 +40,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import de.chaostheorybot.rykerconnect.R
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
+import de.chaostheorybot.rykerconnect.Screen
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import de.chaostheorybot.rykerconnect.ui.screens.composables.bluetoothDialog
 import de.chaostheorybot.rykerconnect.ui.screens.homescreen.cards.DebugCard
@@ -56,7 +58,8 @@ import kotlin.coroutines.CoroutineContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(viewModel: HomeViewModel = viewModel(), store: RykerConnectStore, companion: () -> Unit ) {
+fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
+               store: RykerConnectStore, companion: () -> Unit ) {
 
     val intercomConnected = store.getInterComConnectedToken.collectAsState(initial = false)
     viewModel.updateIntercomConnected(intercomConnected.value)
@@ -86,7 +89,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), store: RykerConnectStore,
         while (intercomConnected.value){
             viewModel.setBatteryStatus()
             Log.d("Set Battery Status", "Set Battery - INSIDE")
-            delay(300000)
+            delay(240_000)
         }
     }
 
@@ -170,7 +173,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), store: RykerConnectStore,
             }
 
             item {
-                ServiceCard()
+                ServiceCard(customizeClick = { nav.navigate(Screen.ServiceScreen.route)})
             }
 
             item {

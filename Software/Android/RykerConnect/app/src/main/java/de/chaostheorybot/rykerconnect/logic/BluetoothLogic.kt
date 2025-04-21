@@ -63,7 +63,6 @@ object BluetoothLogic{
         val devicesList = mutableListOf<BluetoothDevices>()
 
         try{
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             if (ActivityCompat.checkSelfPermission(
                     application,
                     Manifest.permission.BLUETOOTH_CONNECT
@@ -88,30 +87,9 @@ object BluetoothLogic{
                 }
                 return devicesList
             }
-        }else{
-            if (ActivityCompat.checkSelfPermission(application, Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED
-            ) {
-                if (ActivityCompat.shouldShowRequestPermissionRationale(
-                        application.applicationContext as Activity,
-                        Manifest.permission.BLUETOOTH
-                    )
-                ) {
-                    AlertDialog.Builder(application)
-                        .setTitle("Permission needed")
-                        .setMessage("The Permission is needed")
-                        .create().show()
-                    return devicesList
-                } else {
-                    ActivityCompat.requestPermissions(
-                        application.applicationContext as Activity,
-                        arrayOf(Manifest.permission.BLUETOOTH), 1
-                    )
-                }
-            }
-        }
 
 
-        val bMan: BluetoothManager = application.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val bMan: BluetoothManager = application.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
 
             val bAdapter: BluetoothAdapter = bMan.adapter
             val pairedDevices: Set<BluetoothDevice> = bAdapter.bondedDevices

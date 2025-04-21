@@ -28,6 +28,7 @@ fun setupSpotifyFilter(): IntentFilter{
     return spotifyFilter
 }
 
+
 fun setupChargeStateFilter(): IntentFilter{
     val chargeStateFilter = IntentFilter()
     chargeStateFilter.addAction(Intent.ACTION_BATTERY_CHANGED)

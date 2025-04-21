@@ -1,7 +1,6 @@
 package de.chaostheorybot.rykerconnect.ui.screens.homescreen.cards
 
 import android.companion.CompanionDeviceManager
-import android.companion.CompanionDeviceService
 import android.content.Context
 import android.os.Build
 import androidx.annotation.RequiresApi
@@ -24,9 +23,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContentProviderCompat.requireContext
-import androidx.core.content.ContextCompat.getSystemService
-import androidx.lifecycle.lifecycleScope
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers

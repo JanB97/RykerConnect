@@ -16,7 +16,7 @@ class SetupViewModel(application: Application) : AndroidViewModel(application) {
 
     val visiblePermissionDialogQueue = mutableStateListOf<String>()
     private val permissionToRequest: Array<String?> = arrayOf(
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)Manifest.permission.BLUETOOTH_CONNECT else Manifest.permission.BLUETOOTH,
+        Manifest.permission.BLUETOOTH_CONNECT,
         Manifest.permission.ACCESS_COARSE_LOCATION,
         if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)Manifest.permission.POST_NOTIFICATIONS else null,
         Manifest.permission.READ_PHONE_STATE
@@ -27,7 +27,7 @@ class SetupViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun dismissDialog(){
-        visiblePermissionDialogQueue.removeLast()
+        visiblePermissionDialogQueue.removeAt(visiblePermissionDialogQueue.lastIndex)
     }
 
     fun onPermissionResult(permission: String, isGranted: Boolean){

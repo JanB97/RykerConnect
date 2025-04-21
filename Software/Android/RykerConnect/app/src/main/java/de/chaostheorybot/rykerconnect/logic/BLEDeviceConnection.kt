@@ -58,7 +58,6 @@ class BLEDeviceConnection @RequiresPermission("PERMISSION_BLUETOOTH_CONNECT") co
     val services = MutableStateFlow<List<BluetoothGattService>>(emptyList())
 
     private val callback = object : BluetoothGattCallback() {
-        @RequiresApi(Build.VERSION_CODES.R)
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             super.onConnectionStateChange(gatt, status, newState)
             val connected = newState == BluetoothGatt.STATE_CONNECTED
@@ -79,7 +78,6 @@ class BLEDeviceConnection @RequiresPermission("PERMISSION_BLUETOOTH_CONNECT") co
 
         }
 
-        @RequiresApi(Build.VERSION_CODES.R)
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             super.onServicesDiscovered(gatt, status)
             services.value = gatt.services
@@ -233,43 +231,19 @@ class BLEDeviceConnection @RequiresPermission("PERMISSION_BLUETOOTH_CONNECT") co
         Log.v("BLE writeIntercomBattery", "Write status: $success")
     }
 
-    private fun convertNetworkType(type: Int): Int {
-        when (type) {
-            TelephonyManager.NETWORK_TYPE_UNKNOWN -> return 0
-            TelephonyManager.NETWORK_TYPE_GPRS -> return 1
-            TelephonyManager.NETWORK_TYPE_GSM,
-            TelephonyManager.NETWORK_TYPE_EDGE -> return 2
 
-            TelephonyManager.NETWORK_TYPE_UMTS -> return 3
-            TelephonyManager.NETWORK_TYPE_HSPA -> return 4
-            TelephonyManager.NETWORK_TYPE_HSPAP -> return 5
-            TelephonyManager.NETWORK_TYPE_LTE -> return 6
-            TelephonyManager.NETWORK_TYPE_NR -> return 8
-        }
-        return type
-    }
-    fun writeNetworkState() {
+    fun writeNetworkState(signalStrength: Byte, networkType: Byte) {
         val service = gatt?.getService(RC_SERVICE_UUID)
         val characteristic = service?.getCharacteristic(NETWORK_UUID)
-        if (ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_PHONE_STATE
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            val telephonyManager = context.applicationContext.getSystemService(TELEPHONY_SERVICE) as TelephonyManager
-            telephonyManager.dataNetworkType
-            val signalStrength: Byte =
-            (telephonyManager.signalStrength?.level?.plus(1))?.toByte() ?: 0x00
-            val networkArray = ByteArray(2)
-            networkArray[0] = signalStrength
-            networkArray[1] = convertNetworkType(telephonyManager.dataNetworkType).toByte()
 
-            //val batArray: ByteArray = ByteArray(2) {batLevel.toByte()}
-            Log.d("BLE writeNetworkState", "Write Network: ${networkArray[0]}")
-            Log.d("BLE writeNetworkState", "Write Network: ${networkArray[1]}")
-            val success = writeCharacteristics(characteristic, networkArray)
-            Log.v("BLE writeNetworkState", "Write status: $success")
-        }
+        val networkArray = ByteArray(2)
+        networkArray[0] = signalStrength
+        networkArray[1] = networkType
+        //val batArray: ByteArray = ByteArray(2) {batLevel.toByte()}
+        Log.d("BLE writeNetworkState", "Write Network: ${networkArray[0]}")
+        Log.d("BLE writeNetworkState", "Write Network: ${networkArray[1]}")
+        val success = writeCharacteristics(characteristic, networkArray)
+        Log.v("BLE writeNetworkState", "Write status: $success")
     }
 
     fun writeTime() {
