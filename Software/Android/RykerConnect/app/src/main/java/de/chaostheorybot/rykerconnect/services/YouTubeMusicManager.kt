@@ -9,7 +9,6 @@ import android.os.Looper
 import android.util.Log
 import android.media.MediaMetadata
 import android.media.session.PlaybackState
-import androidx.compose.ui.tooling.data.position
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.waitForBLEConnection
 
@@ -43,6 +42,10 @@ class YouTubeMusicManager(private val context: Context) {
                     "YouTube Music Metadata: Title=$title, Artist=$artist, Album=$album, length=$trackLength"
                 )
 
+                val title_prev = RykerConnectApplication.music.track.value
+                val length_prev = RykerConnectApplication.music.length.value
+                val artist_prev = RykerConnectApplication.music.artist.value
+
                 if (title != null) {
                     RykerConnectApplication.music.track.value = title
                 }
@@ -51,11 +54,13 @@ class YouTubeMusicManager(private val context: Context) {
                 }
                 RykerConnectApplication.music.length.value = trackLength
 
-                updateMetaData(
-                    trackLength = trackLength, trackName = title, artistName = artist,
-                    playing = null,
-                    trackPosition = null
-                )
+                if(title_prev != title || length_prev != trackLength || artist_prev != artist){
+                    updateMetaData(
+                        trackLength = trackLength, trackName = title, artistName = artist,
+                        playing = null,
+                        trackPosition = null
+                    )
+                }
 
                 // ... hier kannst du die Metadaten weiterverarbeiten ...
             }
@@ -63,14 +68,20 @@ class YouTubeMusicManager(private val context: Context) {
             override fun onPlaybackStateChanged(isPlaying: Boolean, trackPosition: Int) {
                 Log.i("RykerDeviceService", "YouTube Music Playback State: isPlaying=$isPlaying, position=$trackPosition")
 
+
+                val trackPosition_prev = RykerConnectApplication.music.position.value
+                val isPlaying_prev = RykerConnectApplication.music.state.value
+
                 RykerConnectApplication.music.position.value = trackPosition
                 RykerConnectApplication.music.state.value = isPlaying
 
-                updateMetaData(
-                    trackLength = null, trackName = null, artistName = null,
-                    playing = isPlaying,
-                    trackPosition = trackPosition
-                )
+                if(trackPosition_prev != trackPosition || isPlaying_prev != isPlaying){
+                    updateMetaData(
+                        trackLength = null, trackName = null, artistName = null,
+                        playing = isPlaying,
+                        trackPosition = trackPosition
+                    )
+                }
                 // ... hier kannst du den Wiedergabestatus weiterverarbeiten ...
             }
         }
