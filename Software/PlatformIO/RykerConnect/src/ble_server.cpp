@@ -142,8 +142,7 @@ void setupBLEServer()
     NimBLEDevice::setSecurityAuth(true, true, true);
     NimBLEDevice::setSecurityPasskey(123456);
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_YESNO);
-    NimBLEServer *pServer = NimBLEDevice::createServer(); 
-    pServer = NimBLEDevice::createServer();
+    NimBLEServer *pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new ServerCallbacks());
 
     /** Optional: set the transmit power, default is 3db */
@@ -221,18 +220,19 @@ void setupBLEServer()
     NimBLECharacteristic *firmwareUpdateCharacteristic = pService->createCharacteristic(FIRMWARE_UPDATE_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN);
     NimBLECharacteristic *firmwareResetCharacteristic = pService->createCharacteristic(FIRMWARE_RESET_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN);
 
-    timeCharacteristic->setCallbacks(new BLECharCallbacks());
-    networkCharacteristic->setCallbacks(new BLECharCallbacks());
-    phoneBatteryCharacteristic->setCallbacks(new BLECharCallbacks());
-    intercomBatteryCharacteristic->setCallbacks(new BLECharCallbacks());
-    mediaDataCharacteristic->setCallbacks(new BLECharCallbacks());
-    notificationCharacteristic->setCallbacks(new BLECharCallbacks());
+    BLECharCallbacks *charCallbacks = new BLECharCallbacks();
+    timeCharacteristic->setCallbacks(charCallbacks);
+    networkCharacteristic->setCallbacks(charCallbacks);
+    phoneBatteryCharacteristic->setCallbacks(charCallbacks);
+    intercomBatteryCharacteristic->setCallbacks(charCallbacks);
+    mediaDataCharacteristic->setCallbacks(charCallbacks);
+    notificationCharacteristic->setCallbacks(charCallbacks);
 
-    brightnessCharacteristic->setCallbacks(new BLECharCallbacks());
-    screenCharacteristic->setCallbacks(new BLECharCallbacks());
-    settingsCharacteristic->setCallbacks(new BLECharCallbacks());
-    firmwareUpdateCharacteristic->setCallbacks(new BLECharCallbacks());
-    firmwareResetCharacteristic->setCallbacks(new BLECharCallbacks());
+    brightnessCharacteristic->setCallbacks(charCallbacks);
+    screenCharacteristic->setCallbacks(charCallbacks);
+    settingsCharacteristic->setCallbacks(charCallbacks);
+    firmwareUpdateCharacteristic->setCallbacks(charCallbacks);
+    firmwareResetCharacteristic->setCallbacks(charCallbacks);
 
     brightnessCharacteristic->setValue(sEEPROM.display_brightness);
     timeCharacteristic->setValue("");

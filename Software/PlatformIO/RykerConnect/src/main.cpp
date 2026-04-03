@@ -81,6 +81,8 @@ void setup() {
   D_print("Start Setup Core: ");
   D_println(xPortGetCoreID());
 
+  dataMutex = xSemaphoreCreateMutex();
+
   setupBLEServer();
 
   setupWebServer();

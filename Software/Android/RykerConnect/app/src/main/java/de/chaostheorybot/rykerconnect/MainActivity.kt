@@ -1,6 +1,6 @@
 package de.chaostheorybot.rykerconnect
 
-import NetworkTypeMonitor
+import de.chaostheorybot.rykerconnect.services.NetworkTypeMonitor
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.bluetooth.BluetoothDevice
@@ -15,8 +15,8 @@ import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.net.MacAddress
 import android.os.Build
-import android.os.Build.VERSION_CODES.TIRAMISU
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -45,6 +45,7 @@ import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getDevice
 import de.chaostheorybot.rykerconnect.ui.screens.homescreen.HomeScreen
 import de.chaostheorybot.rykerconnect.ui.screens.servicescreen.CustomizeServiceScreen
 import de.chaostheorybot.rykerconnect.ui.screens.setupscreen.SetupScreen
+import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.SettingsScreen
 import de.chaostheorybot.rykerconnect.ui.theme.RykerConnectTheme
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
@@ -55,241 +56,139 @@ private const val SELECT_DEVICE_REQUEST_CODE = 0
 
 class MainActivity : ComponentActivity() {
 
-
-
-
     @SuppressLint("MissingPermission")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val store = RykerConnectStore(this)
 
-        //var networkTypeMonitor = NetworkTypeMonitor(this)
-        //networkTypeMonitor.startMonitoring()
-
         setContent {
             val view = LocalView.current
             val window = (view.context as Activity).window
             val navController = rememberNavController()
 
-
             RykerConnectTheme {
-                // A surface container using the 'background' color from the theme
-                Surface(
-                    modifier = Modifier
-                        .fillMaxSize(),
-                    //color = MaterialTheme.colorScheme.primary,
-                ) {
-
+                Surface(modifier = Modifier.fillMaxSize()) {
                     val tokenValue = store.getFirstLaunchToken.collectAsState(initial = false)
                     NavHost(
                         navController = navController,
                         startDestination = if (tokenValue.value) Screen.SetupScreen.route else Screen.HomeScreen.route
                     ) {
-
-                        composable(route = Screen.SetupScreen.route, exitTransition = {
-                            fadeOut(animationSpec = tween(500), targetAlpha = 0.3f).plus(
-                                shrinkOut(
-                                    tween(durationMillis = 1000),
-                                    shrinkTowards = Alignment.TopCenter
-                                ) { fullSize ->
-                                    IntSize(
-                                        fullSize.width / 10,
-                                        fullSize.height / 10
-                                    )
-                                })
-                        }) {
-
+                        composable(route = Screen.SetupScreen.route) {
                             val sColor = MaterialTheme.colorScheme.primaryContainer.toArgb()
-                            if (!view.isInEditMode) {
-                                SideEffect {
-                                    window.statusBarColor = sColor
-                                }
-                            }
+                            SideEffect { window.statusBarColor = sColor }
                             SetupScreen(nav = navController)
                         }
-                        composable(route = Screen.HomeScreen.route, enterTransition = {
-                            return@composable slideIntoContainer(
-                                AnimatedContentTransitionScope.SlideDirection.Up, tween(600)
-                            )
-                        },
-                            popExitTransition = {
-                                return@composable slideOutOfContainer(
-                                    AnimatedContentTransitionScope.SlideDirection.Down, tween(600)
-                                )
-                            }) {
+                        composable(route = Screen.HomeScreen.route) {
                             val sColor = MaterialTheme.colorScheme.surface.toArgb()
-                            HomeScreen(store = store,nav = navController, companion = { setupCompanion(store) })
-                            if (!view.isInEditMode) {
-                                SideEffect {
-                                    window.statusBarColor = sColor
-                                }
-                            }
-
+                            SideEffect { window.statusBarColor = sColor }
+                            HomeScreen(store = store, nav = navController, companion = { setupCompanion(store) })
                         }
-                        composable(route = Screen.ServiceScreen.route, enterTransition = {
-                            return@composable slideIntoContainer(
-                                AnimatedContentTransitionScope.SlideDirection.Up, tween(600)
-                            )
-                        },
-                            popExitTransition = {
-                                return@composable slideOutOfContainer(
-                                    AnimatedContentTransitionScope.SlideDirection.Down, tween(600)
-                                )
-                            }) {
+                        composable(route = Screen.ServiceScreen.route) {
                             val sColor = MaterialTheme.colorScheme.surface.toArgb()
+                            SideEffect { window.statusBarColor = sColor }
                             CustomizeServiceScreen(nav = navController, store = store)
-                            if (!view.isInEditMode) {
-                                SideEffect {
-                                    window.statusBarColor = sColor
-                                }
-                            }
-
                         }
-
+                        composable(route = Screen.SettingsScreen.route) {
+                            val sColor = MaterialTheme.colorScheme.surface.toArgb()
+                            SideEffect { window.statusBarColor = sColor }
+                            SettingsScreen(nav = navController, store = store)
+                        }
                     }
-                    //SetupScreen()
-                    //HomeScreen()
                 }
             }
         }
     }
 
+    private fun isNotificationServiceEnabled(): Boolean {
+        val pkgName = packageName
+        val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+        if (flat != null) {
+            val names = flat.split(":")
+            for (name in names) {
+                val cn = android.content.ComponentName.unflattenFromString(name)
+                if (cn != null && cn.packageName == pkgName) return true
+            }
+        }
+        return false
+    }
 
     @SuppressLint("MissingPermission")
-    fun setupCompanion(store: RykerConnectStore){
-        if (Build.VERSION.SDK_INT >= TIRAMISU) {
+    fun setupCompanion(store: RykerConnectStore) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             lifecycleScope.launch {
-                val deviceManager: CompanionDeviceManager by lazy {
-                    getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
-                }
-                val executor: Executor =  Executor { it.run() }
-                val macAddressToPair = store.getBLEMACToken.firstOrNull()
-                val deviceFilter: BluetoothLeDeviceFilter = BluetoothLeDeviceFilter.Builder()
-                    // Match only Bluetooth devices whose name matches the pattern.
+                val deviceManager = getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
+                val macAddressToPair = store.getBLEMACToken.firstOrNull() ?: return@launch
+                
+                val deviceFilter = BluetoothLeDeviceFilter.Builder()
                     .setNamePattern(Pattern.compile("RykerConnect"))
-                    // Match only Bluetooth devices whose service UUID matches this pattern.
                     .build()
 
-                val pairingRequest: AssociationRequest = AssociationRequest.Builder()
-                    // Find only devices that match this request filter.
+                val pairingRequest = AssociationRequest.Builder()
                     .addDeviceFilter(deviceFilter)
-                    // Stop scanning as soon as one device matching the filter is found.
                     .setSingleDevice(true)
                     .build()
 
-                for (dev in deviceManager.myAssociations) {
-                    if ((dev.deviceMacAddress.toString() == macAddressToPair) && (dev.deviceMacAddress != null)) {
-                        val bledev: BluetoothDevice? = getDevice(application, macAddressToPair)
-                        try{
-                            bledev?.createBond()
-                        }catch (e: Exception){
-                            return@launch
+                var alreadyAssociated = false
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    for (info in deviceManager.myAssociations) {
+                        if (info.deviceMacAddress?.toString()?.equals(macAddressToPair, true) == true) {
+                            alreadyAssociated = true
+                            deviceManager.startObservingDevicePresence(info.deviceMacAddress.toString())
                         }
-
-                        //bledev?.connectGatt(applicationContext,true,bluetoothGattCallback)
-                        val pak: PackageManager = application.packageManager
-                        if (pak.hasSystemFeature(PackageManager.FEATURE_COMPANION_DEVICE_SETUP)) {
-                            //deviceManager.stopObservingDevicePresence(dev.deviceMacAddress.toString())
-                            deviceManager.startObservingDevicePresence(dev.deviceMacAddress.toString())
+                    }
+                } else {
+                    @Suppress("DEPRECATION")
+                    for (address in deviceManager.associations) {
+                        if (address.equals(macAddressToPair, true)) {
+                            alreadyAssociated = true
+                            deviceManager.startObservingDevicePresence(address)
                         }
                     }
                 }
 
-                if (deviceManager.myAssociations.isEmpty()) {
-                    deviceManager.associate(pairingRequest,
-                        executor,
-                        object : CompanionDeviceManager.Callback() {
-                            // Called when a device is found. Launch the IntentSender so the user
-                            // can select the device they want to pair with.
-                            override fun onAssociationPending(intentSender: IntentSender) {
-                                //deviceManager.myAssociations.clear()
-                                intentSender.let {
+                if (!alreadyAssociated) {
+                    val executor = Executor { it.run() }
+                    deviceManager.associate(pairingRequest, executor, object : CompanionDeviceManager.Callback() {
+                        override fun onAssociationPending(intentSender: IntentSender) {
+                            startIntentSenderForResult(intentSender, SELECT_DEVICE_REQUEST_CODE, null, 0, 0, 0)
+                        }
 
-                                    startIntentSenderForResult(
-                                        it,
-                                        SELECT_DEVICE_REQUEST_CODE,
-                                        null,
-                                        0,
-                                        0,
-                                        0
-                                    )
-                                }
+                        override fun onAssociationCreated(associationInfo: AssociationInfo) {
+                            val macAddress = associationInfo.deviceMacAddress.toString()
+                            lifecycleScope.launch { store.saveBLEMAC(macAddress) }
+                            deviceManager.startObservingDevicePresence(macAddress)
+                        }
 
+                        @Deprecated("Legacy")
+                        override fun onDeviceFound(intentSender: IntentSender) {
+                            startIntentSenderForResult(intentSender, SELECT_DEVICE_REQUEST_CODE, null, 0, 0, 0)
+                        }
 
-                            }
-
-                            override fun onDeviceFound(intentSender: IntentSender) {
-                                super.onDeviceFound(intentSender)
-                            }
-
-                            override fun onAssociationCreated(associationInfo: AssociationInfo) {
-                                // The association is created.
-                                val macAddress: MacAddress? = associationInfo.deviceMacAddress
-                                lifecycleScope.launch {
-                                    store.saveBLEMAC(macAddress.toString())
-                                }
-                                val pak: PackageManager = application.packageManager
-                                if (pak.hasSystemFeature(PackageManager.FEATURE_COMPANION_DEVICE_SETUP)) {
-                                    deviceManager.startObservingDevicePresence(macAddress.toString())
-                                }
-                            }
-
-                            override fun onFailure(errorMessage: CharSequence?) {
-                                // Handle the failure.
-                            }
-
-                        })
+                        override fun onFailure(errorMessage: CharSequence?) {
+                            Log.e("MainActivity", "Association failed: $errorMessage")
+                        }
+                    })
                 }
             }
-
         }
     }
-
-
 
     @SuppressLint("MissingPermission")
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        when (requestCode) {
-            SELECT_DEVICE_REQUEST_CODE -> when(resultCode) {
-                Activity.RESULT_OK -> {
-                    // The user chose to pair the app with a Bluetooth device.
-                    val deviceToPair: ScanResult? = data?.getParcelableExtra(CompanionDeviceManager.EXTRA_DEVICE)
-
-                    deviceToPair?.let { device ->
-                        RykerConnectApplication.activeConnection.value = device.run { BLEDeviceConnection(application, device.device) }
-                        RykerConnectApplication.activeConnection.value?.connect()
-
-                       // device.device.connectGatt(this, false, BLEDeviceConnection)
-                        if(device.device.bondState == BluetoothDevice.BOND_NONE){
-                            device.device.createBond()
-                            Log.d("onActivityResult", "BOND")
-                        }
-                        // Maintain continuous interaction with a paired device.
-                    }
+        if (requestCode == SELECT_DEVICE_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
+            val deviceToPair: ScanResult? = data?.getParcelableExtra(CompanionDeviceManager.EXTRA_DEVICE)
+            deviceToPair?.let { result ->
+                val connection = BLEDeviceConnection(application, result.device)
+                RykerConnectApplication.activeConnection.value = connection
+                connection.connect()
+                if (result.device.bondState == BluetoothDevice.BOND_NONE) {
+                    result.device.createBond()
                 }
             }
-            else -> super.onActivityResult(requestCode, resultCode, data)
+        } else {
+            super.onActivityResult(requestCode, resultCode, data)
         }
-    }
-
-
-    override fun onStart() {
-        super.onStart()
-//        val chargeStateReceiver : BroadcastReceiver = ChargeStateReceiver()
-//        val chargeStateFilter = setupChargeStateFilter()
-//        ContextCompat.registerReceiver(this, chargeStateReceiver, chargeStateFilter, ContextCompat.RECEIVER_EXPORTED)
-    }
-
-    override fun onPause() {
-        super.onPause()
-//        this.unregisterReceiver(ChargeStateReceiver())
-    }
-
-
-    override fun onDestroy() {
-        super.onDestroy()
-        //this.unregisterReceiver(BluetoothConnectReceiver())
     }
 }

@@ -40,13 +40,20 @@ setLeftSide();
 
 void splitScreen()
 {
+  String localMusicTitle, localMusicArtist, localNetworkType;
+  if(xSemaphoreTake(dataMutex, pdMS_TO_TICKS(50)) == pdTRUE){
+    localMusicTitle = music_title;
+    localMusicArtist = music_artist;
+    localNetworkType = network_type;
+    xSemaphoreGive(dataMutex);
+  }
 
   setLeftSide();
   u8g2_current->clearBuffer();					// clear the internal memory
   drawUiClock();
   drawUI_left();    
   drawBattery(3,2,batteryIconSelection);
-  drawMusicUI(music_title, music_artist, music_timer,music_length,playstate,sEEPROM.screen);
+  drawMusicUI(localMusicTitle, localMusicArtist, music_timer,music_length,playstate,sEEPROM.screen);
   //u8g2_current->setFont(u8g2_font_profont17_tf); //fix temp location, keine ahnung wieso...
 
   drawPopups();
@@ -56,9 +63,9 @@ void splitScreen()
   u8g2_current->clearBuffer();					// clear the internal memory
   drawTemperature(global_temp);
   drawBLConnect(OLED_WIDTH/2-2,2 ,blConnected);
-  drawNetworkStatus(OLED_WIDTH/2-4-32, 2, network_signal,network_type);
+  drawNetworkStatus(OLED_WIDTH/2-4-32, 2, network_signal,localNetworkType);
   drawUI_right();
-  drawMusicUI(music_title, music_artist, music_timer,music_length,playstate,sEEPROM.screen);
+  drawMusicUI(localMusicTitle, localMusicArtist, music_timer,music_length,playstate,sEEPROM.screen);
 
   drawPopups();
   u8g2_current->sendBuffer();
@@ -68,13 +75,20 @@ void splitScreen()
 
 void mediaScreen()
 {
+  String localMusicTitle, localMusicArtist, localNetworkType;
+  if(xSemaphoreTake(dataMutex, pdMS_TO_TICKS(50)) == pdTRUE){
+    localMusicTitle = music_title;
+    localMusicArtist = music_artist;
+    localNetworkType = network_type;
+    xSemaphoreGive(dataMutex);
+  }
 
   setLeftSide();
   u8g2_current->clearBuffer();					// clear the internal memory
   drawUiClock();
   drawUI_left();    
   drawBattery(3,2,batteryIconSelection);
-  drawMusicUI(music_title, music_artist, music_timer,music_length,playstate,sEEPROM.screen);
+  drawMusicUI(localMusicTitle, localMusicArtist, music_timer,music_length,playstate,sEEPROM.screen);
 
   drawPopups();
   u8g2_current->sendBuffer();					// transfer internal memory to the display
@@ -82,10 +96,10 @@ void mediaScreen()
   setRightSide();
   u8g2_current->clearBuffer();					// clear the internal memory
   drawTemperature(global_temp);
-  drawBLConnect(OLED_WIDTH/2-2,2 ,blConnected);
-  drawNetworkStatus(OLED_WIDTH/2-4-32, 2, network_signal,network_type);
   drawUI_right();
-  drawMusicUI(music_title, music_artist, music_timer,music_length,playstate,sEEPROM.screen);
+  drawBLConnect(OLED_WIDTH/2-2,2 ,blConnected);
+  drawNetworkStatus(OLED_WIDTH/2-4-32, 2, network_signal,localNetworkType);
+  drawMusicUI(localMusicTitle, localMusicArtist, music_timer,music_length,playstate,sEEPROM.screen);
 
   drawPopups();
   u8g2_current->sendBuffer();
@@ -93,7 +107,16 @@ void mediaScreen()
 }
 
 void drawPopups(){
-  drawNotificationPopup(notificationType,notificationTitle,notificationText);
+  if(notificationDisplayed){
+    String localType, localTitle, localText;
+    if(xSemaphoreTake(dataMutex, pdMS_TO_TICKS(50)) == pdTRUE){
+      localType = notificationType;
+      localTitle = notificationTitle;
+      localText = notificationText;
+      xSemaphoreGive(dataMutex);
+    }
+    drawNotificationPopup(localType, localTitle, localText);
+  }
   drawOTAPopup();
   drawResetPopup();
 }

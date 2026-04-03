@@ -15,121 +15,104 @@ import android.util.Log
 import androidx.core.app.ActivityCompat
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import java.lang.reflect.Method
 
 
-object BluetoothLogic{
-
-    private var bluetoothDevicesMutableList = mutableListOf<BluetoothDevices>()
-    private var MainDevicesMutableList = mutableListOf<BluetoothDevices>()
-    var isSelectedMAC: String = ""
-    private var isSelectedMainMAC: String = ""
+object BluetoothLogic {
 
     fun getBatteryLevel(pairedDevice: BluetoothDevice?): Int {
-        return pairedDevice?.let { bluetoothDevice ->
-            (bluetoothDevice.javaClass.getMethod("getBatteryLevel"))
-                .invoke(pairedDevice) as Int
-        } ?: -1
+        return try {
+            pairedDevice?.let { bluetoothDevice ->
+                val method: Method = bluetoothDevice.javaClass.getMethod("getBatteryLevel")
+                method.invoke(bluetoothDevice) as Int
+            } ?: -1
+        } catch (e: Exception) {
+            Log.e("BluetoothLogic", "Error getting battery level: ${e.message}")
+            -1
+        }
     }
 
 
     @SuppressLint("MissingPermission")
     fun getDevice(application: Application, deviceAddress: String): BluetoothDevice? {
-        try {
-            val bMan: BluetoothManager =
-                application.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-            val bAdapter: BluetoothAdapter = bMan.adapter
+        return try {
+            val bMan = application.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val bAdapter = bMan.adapter
             val pairedDevices: Set<BluetoothDevice> = bAdapter.bondedDevices
-            if (pairedDevices.isNotEmpty()) {
-                // There are paired devices. Get the name and address of each paired device.
-                for (device in pairedDevices) {
-                    if (device.address.lowercase() == deviceAddress.lowercase()) {
-                        return device
-                    }
-
-                }
-            }
-            return null
-        }catch (e: Exception) {
-            Log.d("BLE getDevice", e.cause.toString())
-            Log.d("BLE getDevice", e.message.toString())
-            return null }
+            pairedDevices.find { it.address.equals(deviceAddress, ignoreCase = true) }
+        } catch (e: Exception) {
+            Log.e("BluetoothLogic", "getDevice error: ${e.message}")
+            null
+        }
     }
 
 
-    fun getPairedDeviceList(application: Application): MutableList<BluetoothDevices>{
+    fun getPairedDeviceList(application: Application): MutableList<BluetoothDevices> {
         val devicesList = mutableListOf<BluetoothDevices>()
 
-        try{
-            if (ActivityCompat.checkSelfPermission(
-                    application,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                if (ActivityCompat.shouldShowRequestPermissionRationale(
-                        application.applicationContext as Activity,
-                        Manifest.permission.BLUETOOTH_CONNECT
-                    )
-                ) {
-                    AlertDialog.Builder(application)
-                        .setTitle("Permission needed")
-                        .setMessage("The Permission is needed")
-                        .create().show()
-                } else {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Manifest.permission.BLUETOOTH_CONNECT
+        } else {
+            Manifest.permission.BLUETOOTH
+        }
 
-                    ActivityCompat.requestPermissions(
-                        application.applicationContext as Activity,
-                        arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1
-                    )
+        if (ActivityCompat.checkSelfPermission(application, permission) != PackageManager.PERMISSION_GRANTED) {
+            Log.w("BluetoothLogic", "Missing bluetooth permissions")
+            return devicesList
+        }
 
-                }
-                return devicesList
-            }
-
-
-            val bMan: BluetoothManager = application.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-
-            val bAdapter: BluetoothAdapter = bMan.adapter
+        try {
+            val bMan = application.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val bAdapter = bMan.adapter
             val pairedDevices: Set<BluetoothDevice> = bAdapter.bondedDevices
-            if (pairedDevices.isNotEmpty()) {
-                for (device in pairedDevices) {
-                    devicesList.add(
-                        BluetoothDevices(device.name, device.address,
-                            getConnectionStatus(device))
+            for (device in pairedDevices) {
+                devicesList.add(
+                    BluetoothDevices(
+                        device.name ?: "Unknown",
+                        device.address,
+                        getConnectionStatus(device)
                     )
-                }
+                )
             }
-        }catch(e: Exception){
-            Log.d("Bluetooth Catch", e.message.orEmpty())
+        } catch (e: Exception) {
+            Log.e("BluetoothLogic", "getPairedDeviceList error: ${e.message}")
         }
         return devicesList
     }
 
-    fun getConnectionStatus(pairedDevice: BluetoothDevice?): Boolean{
-        var connected = false
-        if(pairedDevice != null){
-            val m: Method = pairedDevice.javaClass.getMethod("isConnected")
-            connected = m.invoke(pairedDevice) as Boolean
+    fun getConnectionStatus(pairedDevice: BluetoothDevice?): Boolean {
+        return try {
+            pairedDevice?.let {
+                val m: Method = it.javaClass.getMethod("isConnected")
+                m.invoke(it) as Boolean
+            } ?: false
+        } catch (e: Exception) {
+            false
         }
-        return connected
     }
 
-    fun waitForBLEConnection(): Boolean{
-        if(RykerConnectApplication.activeConnection.value?.isConnected?.value != true){
-            RykerConnectApplication.activeConnection.value?.connect()
-        }else if(RykerConnectApplication.activeConnection.value?.services?.value?.isNotEmpty() == true){
+    /**
+     * Suspending version of waitForBLEConnection.
+     */
+    suspend fun waitForBLEConnection(): Boolean {
+        val connection = RykerConnectApplication.activeConnection.value ?: return false
+        
+        if (connection.isConnected.value && connection.services.value.isNotEmpty()) {
             return true
         }
-        var i = -1
-        while ( (RykerConnectApplication.activeConnection.value?.isConnected?.value != true || RykerConnectApplication.activeConnection.value?.services?.value?.isEmpty() == true) && i<20)
-        {
-            i++
-            Thread.sleep(20)
+
+        if (!connection.isConnected.value) {
+            connection.connect()
         }
-        return RykerConnectApplication.activeConnection.value?.isConnected?.value == true && RykerConnectApplication.activeConnection.value?.services?.value?.isNotEmpty() == true
+
+        // Wait up to 4 seconds for connection and services
+        return withTimeoutOrNull(4000) {
+            while (!(connection.isConnected.value && connection.services.value.isNotEmpty())) {
+                delay(200)
+            }
+            true
+        } ?: false
     }
 
 }
-

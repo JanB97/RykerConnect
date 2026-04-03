@@ -20,9 +20,13 @@ void timeCallback(const uint8_t* data, uint8_t size)
 void networkCallback(uint16_t bytes)
 {     
     D_println(" Network Characteristic!");
-    D_printf(" Signal: %i | Type %i (%s)", (uint8_t)bytes, bytes >> 8,  convertNetworkType(bytes >> 8));
+    String localType = convertNetworkType(bytes >> 8);
+    D_printf(" Signal: %i | Type %i (%s)", (uint8_t)bytes, bytes >> 8, localType.c_str());
     network_signal = (uint8_t)bytes;
-    network_type = convertNetworkType(bytes >> 8);
+    if(xSemaphoreTake(dataMutex, pdMS_TO_TICKS(100)) == pdTRUE){
+        network_type = localType;
+        xSemaphoreGive(dataMutex);
+    }
 }
 String convertNetworkType(byte type)
 {
@@ -61,38 +65,48 @@ void mediaDataCallback(const uint8_t* data, uint8_t size)
 {
     D_println(" Media Data Characteristic!");  
 
+    if(size < 5) return;
+
+    bool localPlaystate = playstate;
     if((byte)data[0] == 0){
-      playstate = false;
+      localPlaystate = false;
     }else if((byte)data[0] == 1){
-      playstate = true;
+      localPlaystate = true;
     }
-    //music_timer = value.substring(1, value.length()).toInt();
-    //music_timer = (uint32_t)
 
-    music_timer = (data[2]) | (data[1] << 8);
-    music_length = (data[4]) | (data[3] << 8);
+    uint16_t localTimer = (data[2]) | (data[1] << 8);
+    uint16_t localLength = (data[4]) | (data[3] << 8);
 
-    if(size >5){
-        char str[size-4];
-        memcpy(str, data+5, size);
+    String localTitle = "";
+    String localArtist = "";
+
+    if(size > 5){
+        uint8_t strLen = size - 5;
+        char str[strLen + 1];
+        memcpy(str, data + 5, strLen);
+        str[strLen] = '\0';
         D_println(str);
-        int delimiter_title = String(str).indexOf(0x03);
-        music_title = String(str).substring(0, delimiter_title);
-        music_title.trim();
-        music_artist = String(str).substring(delimiter_title + 1, size-4);
-        music_artist.trim();
+        String strValue(str);
+        int delimiter_title = strValue.indexOf(0x03);
+        localTitle = strValue.substring(0, delimiter_title);
+        localTitle.trim();
+        localArtist = strValue.substring(delimiter_title + 1);
+        localArtist.trim();
     }
 
-    //D_print("| ");
-    //for(int i = 0; i<size; i++){
-    //    Serial.printf("Byte[%i]: %i | ", i, data[i]);
-    //}
-    //D_println();
+    D_printf(" Media Playstate: %i", localPlaystate);
+    D_printf(" Position: %i", localTimer);
+    D_printf(" Title: %s", localTitle.c_str());
+    D_printf(" Artist: %s", localArtist.c_str());
 
-    D_printf(" Media Playstate: %i", playstate);
-    D_printf(" Position: %i", music_timer);
-    D_printf(" Title: %s", music_title);
-    D_printf(" Artist: %s", music_artist);
+    if(xSemaphoreTake(dataMutex, pdMS_TO_TICKS(100)) == pdTRUE){
+        playstate = localPlaystate;
+        music_timer = localTimer;
+        music_length = localLength;
+        music_title = localTitle;
+        music_artist = localArtist;
+        xSemaphoreGive(dataMutex);
+    }
 }
 
 void notificationCallback(String value)
@@ -102,18 +116,24 @@ void notificationCallback(String value)
     int delimiter_type = value.indexOf(0x03);
     int delimiter_title = value.indexOf(0x03,delimiter_type+1);
 
-    notificationType = value.substring(0,delimiter_type);
-    notificationTitle = value.substring(delimiter_type+1, delimiter_title);
-    notificationTitle.trim();
-    notificationText = value.substring(delimiter_title+1, value.length());
-    notificationText.trim();
+    String localType = value.substring(0,delimiter_type);
+    String localTitle = value.substring(delimiter_type+1, delimiter_title);
+    localTitle.trim();
+    String localText = value.substring(delimiter_title+1, value.length());
+    localText.trim();
 
-    D_printf(" Type: %s", notificationType);
-    D_printf(" Title: %s", notificationTitle);
-    D_printf(" Text: %s", notificationText.c_str());
+    D_printf(" Type: %s", localType.c_str());
+    D_printf(" Title: %s", localTitle.c_str());
+    D_printf(" Text: %s", localText.c_str());
     
-    previousNotificationMillis = millis();
-    notificationDisplayed = true;
+    if(xSemaphoreTake(dataMutex, pdMS_TO_TICKS(100)) == pdTRUE){
+        notificationType = localType;
+        notificationTitle = localTitle;
+        notificationText = localText;
+        previousNotificationMillis = millis();
+        notificationDisplayed = true;
+        xSemaphoreGive(dataMutex);
+    }
 }
 
 void setDisplayBrightnessCallback(uint8_t brightness)

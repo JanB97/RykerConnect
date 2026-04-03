@@ -1,7 +1,6 @@
 package de.chaostheorybot.rykerconnect.services
 
 import android.annotation.SuppressLint
-import android.app.Application
 import android.app.Notification
 import android.content.pm.PackageManager
 import android.service.notification.NotificationListenerService
@@ -13,87 +12,83 @@ import de.chaostheorybot.rykerconnect.logic.BLEDeviceConnection
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getDevice
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-
 
 data class notifyListClass(
     val app: String,
     val id: Int
 )
 
-class NotificationListener: NotificationListenerService() {
+class NotificationListener : NotificationListenerService() {
 
     private val notifyList: MutableList<notifyListClass> = ArrayList()
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     @SuppressLint("MissingPermission")
-    override fun onNotificationPosted(sbn:  StatusBarNotification?) {
+    override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
-
 
         val intID = sbn?.id
         val strApp = sbn?.packageName.toString()
 
-
-
-        if(strApp.isNotEmpty() && intID != null){
+        if (strApp.isNotEmpty() && intID != null) {
             val notifyListItem = notifyListClass(app = strApp, id = intID)
-            if(!notifyList.contains(notifyListItem) || strApp == "com.whatsapp" || true){
+            
+            // Filter für doppelte Benachrichtigungen (WhatsApp etc.)
+            if (!notifyList.contains(notifyListItem) || strApp == "com.whatsapp") {
                 notifyList.add(notifyListItem)
-                val strCat:String = sbn.notification?.category.toString()
-                val strTitle:String = sbn.notification?.extras?.getString(Notification.EXTRA_TITLE).toString()
+                if (notifyList.size > 50) notifyList.removeAt(0) // Liste begrenzen
+
+                val strTitle = sbn.notification?.extras?.getString(Notification.EXTRA_TITLE).toString()
                 val strTxt = sbn.notification?.extras?.getCharSequence(Notification.EXTRA_TEXT).toString()
-                val strSubTxt = sbn.notification?.extras?.getString(Notification.EXTRA_SUB_TEXT).toString()
                 val strBigTxt = sbn.notification?.extras?.getCharSequence(Notification.EXTRA_BIG_TEXT).toString()
+                val finalTxt = if (strBigTxt != "null" && strBigTxt.isNotEmpty()) strBigTxt else strTxt
 
+                val store = RykerConnectStore(applicationContext)
 
-                Log.d("Notification Service", "Category: $strCat | ID: $intID")
-                Log.d("Notification Service", "Title: $strTitle | Text: $strTxt | Sub Text: $strSubTxt | Big Text: $strBigTxt")
-                val context = applicationContext
-                val store: RykerConnectStore? = context?.let { RykerConnectStore(it) }
+                serviceScope.launch {
+                    try {
+                        val packageManager = applicationContext.packageManager
+                        val appInfo = packageManager.getApplicationInfo(strApp, PackageManager.GET_META_DATA)
+                        val appName = packageManager.getApplicationLabel(appInfo).toString()
 
-                val packageManager = applicationContext.packageManager
-                val appName = packageManager.getApplicationLabel(
-                    packageManager.getApplicationInfo(
-                        strApp,
-                        PackageManager.GET_META_DATA
-                    )
-                ) as String
+                        // In Datenbank speichern
+                        store.saveNotification(
+                            category = sbn.notification?.category.toString(),
+                            title = strTitle,
+                            text = finalTxt,
+                            app = strApp,
+                            appname = appName
+                        )
 
-                CoroutineScope(Dispatchers.IO).launch {
-                    store?.saveNotification(category = strCat, title = strTitle, text = if(strBigTxt != "null") strBigTxt else strTxt, app = strApp, appname = appName)
-                }
-                if(runBlocking { store?.getBLEAppear() } == true){
-                    if(RykerConnectApplication.activeConnection.value?.isConnected?.value != true){
-                        val mac = runBlocking { store?.getBLEMAC() }
-                        val device = mac?.let { getDevice(application , it) }
-                        RykerConnectApplication.activeConnection.value = device?.run { BLEDeviceConnection(Application(), device) }
-                        RykerConnectApplication.activeConnection.value?.connect()
-                        RykerConnectApplication.activeConnection.value?.discoverServices()
-                        Log.d("NotificationReceiver BLE", "BLE was not Connected")
-                        runBlocking { delay(200) }
+                        // An BLE senden, wenn aktiv
+                        if (store.getBLEAppear() == true) {
+                            var connection = RykerConnectApplication.activeConnection.value
+                            
+                            // Falls keine Verbindung da ist, versuchen wir sie aufzubauen
+                            if (connection == null || !connection.isConnected.value) {
+                                val mac = store.getBLEMACToken.firstOrNull()
+                                if (mac != null) {
+                                    val device = getDevice(application, mac)
+                                    if (device != null) {
+                                        connection = BLEDeviceConnection(application, device)
+                                        RykerConnectApplication.activeConnection.value = connection
+                                        connection.connect()
+                                        Log.d("NotificationListener", "Reconnecting BLE...")
+                                    }
+                                }
+                            }
+
+                            // Senden (die neue writeNotification Methode hat eigene Retries und Mutex)
+                            connection?.writeNotification(appName = appName, title = strTitle, text = finalTxt)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("NotificationListener", "Error processing notification: ${e.message}")
                     }
-                    RykerConnectApplication.activeConnection.value?.writeNotification(appName = appName, title = strTitle, text = if(strBigTxt != "null") strBigTxt else strTxt)
-                    runBlocking { delay(200) }
                 }
-            }else {
-                Log.d("Notification Service", "ID: $intID already in ARRAY")
             }
-
-        }else{
-            Log.d("Notification Service", "id empty")
         }
-
-
-
-
-
-        //val i = Intent(R.string.str_local_notificationlistener_intent.toString())
-        //i.putExtra("notification_event", "$strNum | $strTxt")
-        //Log.d("Notification_Event", "NotificationListener: $strNum | $strTxt")
-        //LocalBroadcastManager.getInstance(this).sendBroadcast(i);
-        //Log.d("Notification_Event", "Broadcast sent")
     }
-
 }

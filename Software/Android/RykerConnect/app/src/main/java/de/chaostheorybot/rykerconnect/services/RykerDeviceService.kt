@@ -1,18 +1,22 @@
 package de.chaostheorybot.rykerconnect.services
 
-import NetworkTypeMonitor
 import android.annotation.SuppressLint
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.bluetooth.BluetoothDevice
 import android.companion.AssociationInfo
 import android.companion.CompanionDeviceService
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.BatteryManager
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import de.chaostheorybot.rykerconnect.R
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import de.chaostheorybot.rykerconnect.data.MusicService
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
@@ -22,220 +26,145 @@ import de.chaostheorybot.rykerconnect.logic.BLEDeviceConnection
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getBatteryLevel
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getDevice
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.waitForBLEConnection
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
 
-class RykerDeviceService: CompanionDeviceService() {
+class RykerDeviceService : CompanionDeviceService() {
 
-    private val chargeStateReceiver : BroadcastReceiver = ChargeStateReceiver()
-    private val spotifyReceiver : BroadcastReceiver = SpotifyReceiver()
+    private val chargeStateReceiver: BroadcastReceiver = ChargeStateReceiver()
+    private val spotifyReceiver: BroadcastReceiver = SpotifyReceiver()
     private var batteryUpdateJob: Job? = null
-    private lateinit var youTubeMusicManager: YouTubeMusicManager
+    private var youTubeMusicManager: YouTubeMusicManager? = null
     private lateinit var networkTypeMonitor: NetworkTypeMonitor
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun onCreate() {
         super.onCreate()
-        Log.d("Service", "onCreate")
-        youTubeMusicManager = YouTubeMusicManager(this)
-        youTubeMusicManager.setupYoutubeController()
+        Log.d("RykerDeviceService", "Service created")
         networkTypeMonitor = NetworkTypeMonitor(this)
         networkTypeMonitor.startMonitoring()
-        /*
-        CoroutineScope(Dispatchers.IO).launch {
-            if(store.getMusicPlayer()?.id == MusicService.SPOTIFY.id){
-                try {
-                    ContextCompat.registerReceiver(
-                        this@RykerDeviceService,
-                        spotifyReceiver,
-                        spotifyFilter,
-                        ContextCompat.RECEIVER_EXPORTED
-                    )
-                }catch (_: Exception){}
-            }else{
-                if(this::youTubeMusicManager.isInitialized){
-                    youTubeMusicManager = YouTubeMusicManager(this@RykerDeviceService)
-                    youTubeMusicManager.setupYoutubeController()
-                }
-            }
-            }
-         */
-
+        startServiceForeground()
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onStart(intent: Intent?, startId: Int) {
-        super.onStart(intent, startId)
-        Log.d("Service", "onStart ${intent.toString()}")
-    }
+    private fun startServiceForeground() {
+        val channelId = "ryker_connect_service"
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(channelId, "Ryker Connect Active", NotificationManager.IMPORTANCE_LOW)
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(channel)
+        }
 
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setContentTitle("Ryker Connect")
+            .setContentText("Monitoring device and music...")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setOngoing(true)
+            .build()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+        } else {
+            startForeground(1, notification)
+        }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d("Service", "onStartCommand ${intent.toString()}")
-        return super.onStartCommand(intent, flags, startId)
+        return START_STICKY
     }
 
-    override fun onRebind(intent: Intent?) {
-        super.onRebind(intent)
-        Log.d("Service", "Rebind ${intent.toString()}")
-    }
-
-    override fun onUnbind(intent: Intent?): Boolean {
-        Log.d("Service", "onUnbind")
-        return super.onUnbind(intent)
-    }
-
+    @Deprecated("Legacy")
+    override fun onDeviceAppeared(address: String) { initDeviceConnection(address) }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    @SuppressLint("MissingPermission")
     override fun onDeviceAppeared(info: AssociationInfo) {
-        Log.i("Service", "onDeviceAppeared ${info.deviceMacAddress}")
+        info.deviceMacAddress?.toString()?.let { initDeviceConnection(it) }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun initDeviceConnection(address: String) {
         val store = RykerConnectStore(this)
-        val chargeStateFilter = setupChargeStateFilter()
-        val spotifyFilter = setupSpotifyFilter()
-        if(!::networkTypeMonitor.isInitialized){
-            networkTypeMonitor = NetworkTypeMonitor(this)
-        }
-        networkTypeMonitor.startMonitoring()
-        //networkStatusHelper = NetworkStatusHelper(this)
-
-        // Register chargeStateReceiver outside the coroutine
+        
         try {
-            ContextCompat.registerReceiver(
-                this@RykerDeviceService,
-                chargeStateReceiver,
-                chargeStateFilter,
-                ContextCompat.RECEIVER_EXPORTED
-            )
-        } catch (e: Exception) {
-            Log.d("RykerDeviceService", "Create ChargeStateReceiver failed: $e")
-        }
+            ContextCompat.registerReceiver(this, chargeStateReceiver, setupChargeStateFilter(), ContextCompat.RECEIVER_EXPORTED)
+        } catch (e: Exception) { Log.e("RykerDeviceService", "ChargeStateReceiver failed: ${e.message}") }
 
-        // Get current battery level and charging status
-        val batteryManager = getSystemService(Context.BATTERY_SERVICE) as BatteryManager
-        val currentBatteryLevel =
-            batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-        val isCharging =
-            batteryManager.isCharging
-
-        Log.d(
-            "RykerDeviceService",
-            "Initial Battery Level: $currentBatteryLevel; Charging: $isCharging"
-        )
-        RykerConnectApplication.phoneBatteryLevel = currentBatteryLevel
-        RykerConnectApplication.phoneBatteryCharging = isCharging
-
-
-
-        CoroutineScope(Dispatchers.IO).launch {
+        serviceScope.launch {
             store.saveBLEAppear(true)
-
-            val device: BluetoothDevice? = getDevice(application, info.deviceMacAddress.toString())
+            val device: BluetoothDevice? = getDevice(application, address)
             if (device != null) {
-                RykerConnectApplication.activeConnection.value =
-                    device.run { BLEDeviceConnection(application, device) }
+                val connection = BLEDeviceConnection(application, device)
+                RykerConnectApplication.activeConnection.value = connection
+                
                 if (waitForBLEConnection()) {
-                    RykerConnectApplication.activeConnection.value?.writeTime()
-                    RykerConnectApplication.activeConnection.value?.writePhoneBattery(level = currentBatteryLevel, status = isCharging)
+                    connection.syncAll()
+                    withContext(Dispatchers.Main) { setupMusicManager(store) }
+                    
+                    // Erneuter Sync nach 5 Sek zur Sicherheit
+                    delay(5000)
+                    if (connection.isConnected.value) connection.syncAll()
+                }
+            }
+        }
+        startIntercomBatteryUpdates(store)
+    }
 
-                    // The code inside the coroutine can check the music player and register the spotifyReceiver
+    private fun setupMusicManager(store: RykerConnectStore) {
+        serviceScope.launch {
+            val musicPlayer = store.getMusicPlayer()
+            withContext(Dispatchers.Main) {
+                if (musicPlayer?.id == MusicService.SPOTIFY.id) {
                     try {
-                        withContext(Dispatchers.Main) {
-                            if (store.getMusicPlayer()?.id == MusicService.SPOTIFY.id) {
-                                // Register spotifyReceiver outside the coroutine
-                                ContextCompat.registerReceiver(
-                                    this@RykerDeviceService,
-                                    spotifyReceiver,
-                                    spotifyFilter,
-                                    ContextCompat.RECEIVER_EXPORTED
-                                )
-                            } else {
-                                if(!::youTubeMusicManager.isInitialized){
-                                    youTubeMusicManager = YouTubeMusicManager(this@RykerDeviceService)
-                                }
-                                youTubeMusicManager.setupYoutubeController()
+                        ContextCompat.registerReceiver(this@RykerDeviceService, spotifyReceiver, setupSpotifyFilter(), ContextCompat.RECEIVER_EXPORTED)
+                    } catch (_: Exception) {}
+                } else {
+                    if (youTubeMusicManager == null) {
+                        youTubeMusicManager = YouTubeMusicManager(this@RykerDeviceService)
+                    }
+                    youTubeMusicManager?.setupYoutubeController()
+                }
+            }
+        }
+    }
+
+    private fun startIntercomBatteryUpdates(store: RykerConnectStore) {
+        batteryUpdateJob?.cancel()
+        batteryUpdateJob = serviceScope.launch {
+            while (isActive) {
+                if (waitForBLEConnection()) {
+                    try {
+                        store.getInterComMAC()?.let { mac ->
+                            val level = getBatteryLevel(getDevice(application, mac))
+                            if (level != -1) {
+                                Log.d("RykerDeviceService", "Intercom battery: $level")
+                                RykerConnectApplication.activeConnection.value?.writeIntercomBattery(level.toByte())
                             }
                         }
-                    } catch (e: Exception) {
-                        Log.d("RykerDeviceService", "Create SpotifyReceiver failed: $e")
-                    }
-                } else {
-                    Log.e("Service", "Device not connected!")
+                    } catch (e: Exception) { Log.e("RykerDeviceService", "Intercom update error: ${e.message}") }
                 }
-            }
-        }
-        //networkStatusHelper.registerNetworkCallback()
-        batteryUpdateJob = CoroutineScope(Dispatchers.IO).launch {
-            if(waitForBLEConnection()){
-                getBat(store)
-                delay(20_000) // Wait for 1 minute
-                while (isActive) {
-                    try {
-                        getBat(store)
-                    } catch (e: Exception) {
-                        Log.e("RykerDeviceService", "Error writing intercom battery: $e")
-                        // Handle the exception appropriately, e.g., log, retry, etc.
-                    }
-                    delay(120_000) // Wait for 1 minute
-                }
+                delay(60_000) // Alle 60 Sek
             }
         }
     }
 
-
-    private suspend fun getBat(store: RykerConnectStore){
-        try{
-            val intercomDev = store.getInterComMAC()?.let { getDevice(application, it) }
-            val batteryLevel = getBatteryLevel(intercomDev)
-            // Call writeIntercomBattery() inside a try-catch block to handle potential exceptions
-            RykerConnectApplication.activeConnection.value?.writeIntercomBattery(batteryLevel.toByte())
-        }catch (e: Exception) {
-            Log.e("RykerDeviceService", "Error writing intercom battery: $e")
-            // Handle the exception appropriately, e.g., log, retry, etc.
-        }
-
-    }
-
+    override fun onDeviceDisappeared(address: String) { cleanup() }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    override fun onDeviceDisappeared(info: AssociationInfo) {
-        Log.i("Service" , "onDeviceDisappeared ${info.deviceMacAddress}")
-        val store = RykerConnectStore(this)
-        CoroutineScope(Dispatchers.IO).launch {
-            store.saveBLEAppear(false)
-        }
-//        Toast.makeText(applicationContext, "Device disappeared: ${info.deviceMacAddress}", Toast.LENGTH_LONG).show()
-        try{
-            this.unregisterReceiver(chargeStateReceiver)
-            if(this::youTubeMusicManager.isInitialized){
-                youTubeMusicManager.destroy()
-            }else{
-                this.unregisterReceiver(spotifyReceiver)
-            }
-        }catch (e: Exception){
-            Log.e("RykerService", "unregister ChargeStateReceiver failed: $e")
-        }
-        RykerConnectApplication.phoneBatteryLevel = -1
-        RykerConnectApplication.phoneBatteryCharging = false
+    override fun onDeviceDisappeared(info: AssociationInfo) { cleanup() }
+
+    private fun cleanup() {
+        serviceScope.launch { RykerConnectStore(this@RykerDeviceService).saveBLEAppear(false) }
+        try { unregisterReceiver(chargeStateReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(spotifyReceiver) } catch (_: Exception) {}
+        youTubeMusicManager?.destroy()
+        youTubeMusicManager = null
         batteryUpdateJob?.cancel()
-        try {
-            networkTypeMonitor.stopMonitoring()
-        }catch (e: Exception){
-            Log.e("RykerService", "unregister NetworkCallback failed: $e")
-        }
+        RykerConnectApplication.activeConnection.value?.disconnect()
+        RykerConnectApplication.activeConnection.value = null
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        val store = RykerConnectStore(this)
-        CoroutineScope(Dispatchers.IO).launch {
-            store.saveBLEAppear(false)
-        }
-//        Toast.makeText(applicationContext, "Service destroyed", Toast.LENGTH_LONG).show()
-        Log.d("Service" , "onDestroy")
+        cleanup()
+        serviceScope.cancel()
+        try { networkTypeMonitor.stopMonitoring() } catch (_: Exception) {}
     }
 }

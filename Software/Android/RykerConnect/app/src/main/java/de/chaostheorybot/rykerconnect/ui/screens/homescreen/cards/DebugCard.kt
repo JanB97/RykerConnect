@@ -4,22 +4,17 @@ import android.companion.CompanionDeviceManager
 import android.content.Context
 import android.os.Build
 import androidx.annotation.RequiresApi
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
-import androidx.compose.material3.surfaceColorAtElevation
-import androidx.compose.runtime.Composable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -43,6 +38,8 @@ fun DebugCard(title: String?,
 ) {
     val context = LocalContext.current
     val store = RykerConnectStore(context)
+    var expanded by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -53,33 +50,67 @@ fun DebugCard(title: String?,
     {
         Column(
             modifier = Modifier
-                .padding(all = 6.dp)
-                .padding(start = 6.dp),
+                .padding(all = 12.dp)
+                .fillMaxWidth(),
             Arrangement.spacedBy(8.dp)
         ) {
-            Text(text = "Debug", style = MaterialTheme.typography.titleLarge)
-            Spacer(modifier = Modifier.height(2.dp))
-            DebugMedia(title = title, artist = artist, playstate = playstate, tracklength = tracklength, trackposition = trackposition)
-            Button(onClick = { CoroutineScope(Dispatchers.IO).launch { store.clearMediaSaves() } }) {
-                Text(text = "Clear Media Infos")
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(text = "Debug", style = MaterialTheme.typography.titleLarge)
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Show less" else "Show more"
+                )
             }
-            DebugNotification(app = notifyApp, category = notifyCategory,  title = notifyTitle, text = notifyText, appname = notifyAppName)
-            Button(onClick = { CoroutineScope(Dispatchers.IO).launch {
-                store.saveFistLaunch(true)
-            } }) {
-                Text(text = "Reset First Start FLAG")
-            }
-            OutlinedButton(onClick = {
-                CoroutineScope(Dispatchers.Main).launch(){
-                    val deviceManager = context.applicationContext.getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
-                    val associatedDevices = deviceManager.myAssociations
-                    for (device in associatedDevices){
-                        deviceManager.disassociate(device.id)
+
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(),
+                exit = shrinkVertically()
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    DebugMedia(title = title, artist = artist, playstate = playstate, tracklength = tracklength, trackposition = trackposition)
+                    
+                    Button(
+                        onClick = { CoroutineScope(Dispatchers.IO).launch { store.clearMediaSaves() } },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(text = "Clear Media Infos")
+                    }
+                    
+                    DebugNotification(app = notifyApp, category = notifyCategory, title = notifyTitle, text = notifyText, appname = notifyAppName)
+                    
+                    Button(
+                        onClick = { CoroutineScope(Dispatchers.IO).launch { store.saveFistLaunch(true) } },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(text = "Reset First Start FLAG")
+                    }
+                    
+                    OutlinedButton(
+                        onClick = {
+                            CoroutineScope(Dispatchers.Main).launch {
+                                val deviceManager = context.applicationContext.getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    deviceManager.myAssociations.forEach { deviceManager.disassociate(it.id) }
+                                } else {
+                                    @Suppress("DEPRECATION")
+                                    deviceManager.associations.forEach { deviceManager.disassociate(it) }
+                                }
+                                store.saveBLEMAC("")
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(text = "Disassociate Device!")
                     }
                 }
-
-            }) {
-                Text(text = "Disassociate Device!")
             }
         }
     }
@@ -88,42 +119,52 @@ fun DebugCard(title: String?,
 
 @Composable
 fun DebugMedia(title: String?, artist: String?, playstate: Boolean?, tracklength: Int, trackposition: Int){
-    Row {
-        Column {
-            Text(text = "Media Title: ")
-            Text(text = "Media Artist: ")
-            Text(text = "Media State: ")
-            Text(text = "Media Length: ")
-            Text(text = "Media Position: ")
-        }
-        Column {
-            Text(text = title.toString())
-            Text(text = artist.toString())
-            Text(text = playstate.toString())
-            Text(text = tracklength.toString())
-            Text(text = trackposition.toString())
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(modifier = Modifier.padding(8.dp)) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = "Media Title: ", style = MaterialTheme.typography.labelMedium)
+                Text(text = "Media Artist: ", style = MaterialTheme.typography.labelMedium)
+                Text(text = "Media State: ", style = MaterialTheme.typography.labelMedium)
+                Text(text = "Media Length: ", style = MaterialTheme.typography.labelMedium)
+                Text(text = "Media Position: ", style = MaterialTheme.typography.labelMedium)
+            }
+            Column(modifier = Modifier.weight(2f)) {
+                Text(text = title.toString(), style = MaterialTheme.typography.bodySmall)
+                Text(text = artist.toString(), style = MaterialTheme.typography.bodySmall)
+                Text(text = playstate.toString(), style = MaterialTheme.typography.bodySmall)
+                Text(text = tracklength.toString(), style = MaterialTheme.typography.bodySmall)
+                Text(text = trackposition.toString(), style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
-
 }
 
 @Composable
-fun DebugNotification(app: String?,appname: String?, category: String?, title: String?, text: String?){
-    Row {
-        Column {
-            Text(text = "Notify App: ")
-            Text(text = "Notify App Name: ")
-            Text(text = "Notify Category: ")
-            Text(text = "Notify Title: ")
-            Text(text = "Notify Text: ")
-        }
-        Column {
-            Text(text = "$app")
-            Text(text = "$appname")
-            Text(text = "$category")
-            Text(text = "$title")
-            Text(text = "$text")
+fun DebugNotification(app: String?, appname: String?, category: String?, title: String?, text: String?){
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(modifier = Modifier.padding(8.dp)) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = "Notify App: ", style = MaterialTheme.typography.labelMedium)
+                Text(text = "App Name: ", style = MaterialTheme.typography.labelMedium)
+                Text(text = "Category: ", style = MaterialTheme.typography.labelMedium)
+                Text(text = "Title: ", style = MaterialTheme.typography.labelMedium)
+                Text(text = "Text: ", style = MaterialTheme.typography.labelMedium)
+            }
+            Column(modifier = Modifier.weight(2f)) {
+                Text(text = "$app", style = MaterialTheme.typography.bodySmall)
+                Text(text = "$appname", style = MaterialTheme.typography.bodySmall)
+                Text(text = "$category", style = MaterialTheme.typography.bodySmall)
+                Text(text = "$title", style = MaterialTheme.typography.bodySmall)
+                Text(text = "$text", style = MaterialTheme.typography.bodySmall)
+            }
         }
     }
-
 }

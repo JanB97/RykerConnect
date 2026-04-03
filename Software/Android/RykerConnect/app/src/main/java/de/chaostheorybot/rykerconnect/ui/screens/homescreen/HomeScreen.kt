@@ -63,37 +63,33 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
 
     val intercomConnected = store.getInterComConnectedToken.collectAsState(initial = false)
     viewModel.updateIntercomConnected(intercomConnected.value)
-//    val mediaTitle = store.getMediaTitleToken.collectAsState(initial = "")
-//    val mediaArtist = store.getMediaArtistToken.collectAsState(initial = "")
     val mediaTitle = RykerConnectApplication.music.track.collectAsState()
     val mediaArtist = RykerConnectApplication.music.artist.collectAsState()
     val mediaTrackLength = RykerConnectApplication.music.length.collectAsState()
     val mediaPlayState = RykerConnectApplication.music.state.collectAsState()
     val mediaTrackPosition = RykerConnectApplication.music.position.collectAsState()
-//    val mediaPlayState = store.getMediaPlayStateToken.collectAsState(initial = false)
-//    val mediaTrackLength = store.getMediaTrackLengthToken.collectAsState(initial = 0)
-//    val mediaTrackPosition = store.getMediaPlayBackPositionToken.collectAsState(initial = 0)
     val notifyTitle = store.getNotificationTitleToken.collectAsState(initial = "")
     val notifyText = store.getNotificationTextToken.collectAsState(initial = "")
     val notifyApp = store.getNotificationAppToken.collectAsState(initial = "")
     val notifyAppName = store.getNotificationAppNameToken.collectAsState(initial = "")
     val notifyCategory = store.getNotificationCategoryToken.collectAsState(initial = "")
     val mainUnitConnected = store.getBLEAppearToken.collectAsState(initial = false)
+    
+    val associatedMac = store.getBLEMACToken.collectAsState(initial = "")
+    val isAssociated = associatedMac.value.isNotEmpty()
+    
     viewModel.updateMainUnitConnected(mainUnitConnected.value)
 
     LaunchedEffect(intercomConnected.value) {
         delay(500)
         viewModel.setBatteryStatus()
-        Log.d("Set Battery Status", "Set Battery - OUTSIDE")
         delay(3000)
         while (intercomConnected.value){
             viewModel.setBatteryStatus()
-            Log.d("Set Battery Status", "Set Battery - INSIDE")
             delay(240_000)
         }
     }
 
-    //val homeUiState by viewModel.uiState.collectAsState()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val intercomMAC = store.getSelectedMacToken.collectAsState(initial = "__EMPTY__")
 
@@ -114,8 +110,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
 
     Scaffold(
         modifier = Modifier
-            //.displayCutoutPadding()
-
             .fillMaxSize()
             .padding(start = displaycutoutPadding, end = displaycutoutPadding)
             .then(
@@ -128,22 +122,19 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                     WindowInsets.safeContent
                 ) else Modifier
             )
-            .then(if (nestScrollEnable) Modifier.nestedScroll(scrollBehavior.nestedScrollConnection) else Modifier)
-
-            //.nestedScroll(scrollBehavior.nestedScrollConnection)
-                ,
+            .then(if (nestScrollEnable) Modifier.nestedScroll(scrollBehavior.nestedScrollConnection) else Modifier),
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(text = stringResource(id = R.string.app_name), style = MaterialTheme.typography.headlineMedium) },
                 actions = {
-                    IconButton(onClick = { /*TODO*/ }) {
+                    IconButton(onClick = { nav.navigate(Screen.SettingsScreen.route) }) {
                         Icon(
                             imageVector = Icons.Rounded.Settings,
                             contentDescription = "App Settings"
                         )
                     }
                 },
-                scrollBehavior = scrollBehavior /*, colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = if (isSystemInDarkTheme()) dark_HeritageRedContainer else HeritageRed,titleContentColor = light_onHeritageRed) */
+                scrollBehavior = scrollBehavior
             )
         },
         contentWindowInsets = ScaffoldDefaults.contentWindowInsets) {
@@ -152,18 +143,22 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
         LazyColumn(
             modifier = Modifier
                 .padding(top = it.calculateTopPadding())
-                .padding(start = 16.dp, end = 16.dp)
-
-                ,
+                .padding(start = 16.dp, end = 16.dp),
             state = listState
         ) {
 
             item {
-                MainUnitCard(mainUnitDrawable = viewModel.getRykerDrawable(), mainUnitClick = {viewModel.mainUnitClick()} , companion = companion)
+                MainUnitCard(
+                    mainUnitDrawable = viewModel.getRykerDrawable(),
+                    mainUnitClick = { viewModel.mainUnitClick() },
+                    companion = companion,
+                    isConnected = isAssociated,
+                    onNavigateToSettings = { nav.navigate(Screen.SettingsScreen.route) }
+                )
             }
 
             item {
-                IntercomCard(/*homeUiState.intercomConnected*/ viewModel.intercomConnected,
+                IntercomCard(viewModel.intercomConnected,
                     intercomClick = { viewModel.intercomClick() },
                     intercomBattery =  viewModel.intercomBatLvl,
                     selectDeviceClick = { viewModel.selBLDeviceClick() },
@@ -188,8 +183,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
     }
 
         if(viewModel.isBLDeviceDialogShown){
-
             viewModel.selectedMacTMP = bluetoothDialog(onDismiss = { viewModel.onDismissBLDeviceDialog() }, onConfirm = { viewModel.onConfirmBLDeviceDialog() }, pairedDevices = viewModel.pairedInterComDevices, selectedMac = viewModel.selectedMac)
-
         }
 }

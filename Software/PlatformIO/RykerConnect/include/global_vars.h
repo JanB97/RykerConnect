@@ -6,8 +6,9 @@
 #include <DS3231.h>
 #include <Preferences.h>
 #include <mcp9808.h>
+#include <freertos/semphr.h>
 
-//#define DEBUG
+#define DEBUG
 #define SPLASHSCREEN
 
 #define VERSION 0x0001
@@ -81,6 +82,7 @@ extern String network_type;
 extern bool blConnected;
 extern uint8_t screenToDisplay;
 
+extern SemaphoreHandle_t dataMutex;
 
 #pragma region Firmware Update
 

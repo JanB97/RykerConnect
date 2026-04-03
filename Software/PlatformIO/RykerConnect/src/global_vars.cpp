@@ -39,6 +39,8 @@ String network_type = "";
 bool blConnected = false;
 uint8_t screenToDisplay = 0;
 
+SemaphoreHandle_t dataMutex = NULL;
+
 #pragma region Firmware Update
 
 bool firmwareUpdateEnabled = 0;

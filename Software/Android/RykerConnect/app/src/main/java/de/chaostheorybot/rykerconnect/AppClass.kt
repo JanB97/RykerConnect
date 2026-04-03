@@ -10,12 +10,17 @@ class RykerConnectApplication: Application() {
         var phoneBatteryLevel: Int = -1
         var phoneBatteryCharging: Boolean = false
         var music = MusicInfo()
+        
+        // Neu für besseren Sync
+        var networkSignal: Byte = -1
+        var networkType: Byte = 0
+        var intercomBattery: Byte = -1
+        
         val MainUnitConnected = MutableStateFlow<Boolean>(false)
     }
 
     override fun onCreate() {
         super.onCreate()
-        // initialization code here
     }
 }
 

@@ -11,15 +11,26 @@ import android.media.MediaMetadata
 import android.media.session.PlaybackState
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.waitForBLEConnection
+import kotlinx.coroutines.*
 
 /**
  * Verwaltet die Verbindung zu YouTube Music und den Empfang von Metadaten und Wiedergabestatus.
  */
 class YouTubeMusicManager(private val context: Context) {
 
-    private lateinit var youTubeMusicCallback: YouTubeMusicMediaControllerCallback
+    private var youTubeMusicCallback: YouTubeMusicMediaControllerCallback? = null
     private var youTubeMusicController: MediaController? = null
     private var youtubeMusicListener: YouTubeMusicListener
+    private val mediaSessionManager = context.getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
+    private val handler = Handler(Looper.getMainLooper())
+    
+    private val managerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var pollingJob: Job? = null
+
+    private val sessionListener = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
+        Log.d("YouTubeMusicManager", "Active sessions changed, total: ${controllers?.size}")
+        updateController(controllers)
+    }
 
     init {
         youtubeMusicListener = createYoutubeMusicListener()
@@ -29,133 +40,135 @@ class YouTubeMusicManager(private val context: Context) {
         const val YOUTUBE_MUSIC_PACKAGE_NAME = "com.google.android.apps.youtube.music"
     }
 
-    /**
-     * Erstellt einen Listener für YouTube-Musik-Ereignisse.
-     *
-     * @return Ein Objekt, das die YouTubeMusicListener-Schnittstelle implementiert.
-     */
     private fun createYoutubeMusicListener(): YouTubeMusicListener {
         return object : YouTubeMusicListener {
             override fun onMetadataChanged(title: String?, artist: String?, album: String?, trackLength: Int) {
-                Log.i(
-                    "RykerDeviceService",
-                    "YouTube Music Metadata: Title=$title, Artist=$artist, Album=$album, length=$trackLength"
-                )
-
-                val title_prev = RykerConnectApplication.music.track.value
-                val length_prev = RykerConnectApplication.music.length.value
-                val artist_prev = RykerConnectApplication.music.artist.value
-
-                if (title != null) {
-                    RykerConnectApplication.music.track.value = title
-                }
-                if (artist != null) {
-                    RykerConnectApplication.music.artist.value = artist
-                }
+                Log.d("YouTubeMusicManager", "Metadata: $title by $artist")
+                
+                RykerConnectApplication.music.track.value = title ?: ""
+                RykerConnectApplication.music.artist.value = artist ?: ""
                 RykerConnectApplication.music.length.value = trackLength
 
-                if(title_prev != title || length_prev != trackLength || artist_prev != artist){
-                    updateMetaData(
-                        trackLength = trackLength, trackName = title, artistName = artist,
-                        playing = null,
-                        trackPosition = null
-                    )
-                }
-
-                // ... hier kannst du die Metadaten weiterverarbeiten ...
+                updateMetaData(
+                    trackLength = trackLength, trackName = title, artistName = artist,
+                    playing = null,
+                    trackPosition = null
+                )
             }
 
             override fun onPlaybackStateChanged(isPlaying: Boolean, trackPosition: Int) {
-                Log.i("RykerDeviceService", "YouTube Music Playback State: isPlaying=$isPlaying, position=$trackPosition")
-
-
-                val trackPosition_prev = RykerConnectApplication.music.position.value
-                val isPlaying_prev = RykerConnectApplication.music.state.value
-
+                Log.d("YouTubeMusicManager", "Playback: isPlaying=$isPlaying, pos=$trackPosition")
+                
                 RykerConnectApplication.music.position.value = trackPosition
                 RykerConnectApplication.music.state.value = isPlaying
 
-                if(trackPosition_prev != trackPosition || isPlaying_prev != isPlaying){
-                    updateMetaData(
-                        trackLength = null, trackName = null, artistName = null,
-                        playing = isPlaying,
-                        trackPosition = trackPosition
-                    )
-                }
-                // ... hier kannst du den Wiedergabestatus weiterverarbeiten ...
+                updateMetaData(
+                    trackLength = null, trackName = null, artistName = null,
+                    playing = isPlaying,
+                    trackPosition = trackPosition
+                )
             }
         }
     }
 
 
     fun updateMetaData(playing: Boolean?, trackPosition: Int?, trackLength: Int?, trackName: String?, artistName: String?){
-        Log.d("RykerDeviceService", "updateMetaData Params received: playing: $playing, trackPosition: $trackPosition, trackLength: $trackLength, trackName: $trackName, artistName: $artistName")
-        if (waitForBLEConnection()) {
-            RykerConnectApplication.activeConnection.value?.writeMediaData(
-                playstate = playing ?: RykerConnectApplication.music.state.value,
-                position = (trackPosition?.div(1000))?.plus(if (playing == true) +1 else 0) ?: RykerConnectApplication.music.position.value,
-                trackLength = trackLength?.div(1000) ?: RykerConnectApplication.music.length.value.div(1000),
-                title = trackName ?: RykerConnectApplication.music.track.value,
-                artist = artistName ?: RykerConnectApplication.music.artist.value
-            )
-        } else {
-            Log.e("RykerDeviceService", "BLE send failed - Not CONNECTION!")
+        managerScope.launch {
+            try {
+                if (waitForBLEConnection()) {
+                    val finalPlaying = playing ?: RykerConnectApplication.music.state.value
+                    val finalPos = (trackPosition ?: RykerConnectApplication.music.position.value) / 1000
+                    val finalLen = (trackLength ?: RykerConnectApplication.music.length.value) / 1000
+                    
+                    RykerConnectApplication.activeConnection.value?.writeMediaData(
+                        playstate = finalPlaying,
+                        position = finalPos.plus(if (finalPlaying) 1 else 0),
+                        trackLength = finalLen,
+                        title = trackName ?: RykerConnectApplication.music.track.value,
+                        artist = artistName ?: RykerConnectApplication.music.artist.value
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e("YouTubeMusicManager", "Error updating metadata: ${e.message}")
+            }
         }
     }
 
-
-    /**
-     * Richtet den MediaController für YouTube Music ein und registriert den Callback.
-     */
     fun setupYoutubeController() {
-        youTubeMusicCallback = YouTubeMusicMediaControllerCallback(youtubeMusicListener)
+        try {
+            val componentName = ComponentName(context, NotificationListener::class.java)
+            mediaSessionManager.removeOnActiveSessionsChangedListener(sessionListener)
+            mediaSessionManager.addOnActiveSessionsChangedListener(sessionListener, componentName)
+            
+            startSessionPolling()
+        } catch (e: Exception) {
+            Log.e("YouTubeMusicManager", "Error setting up session listener: ${e.message}")
+        }
+    }
 
-        val mediaSessionManager =
-            context.getSystemService(Context.MEDIA_SESSION_SERVICE) as MediaSessionManager
-        val controllers = mediaSessionManager.getActiveSessions(
-            ComponentName(
-                context,
-                RykerDeviceService::class.java
-            )
-        )
+    private fun startSessionPolling() {
+        pollingJob?.cancel()
+        pollingJob = managerScope.launch {
+            while (isActive) {
+                withContext(Dispatchers.Main) {
+                    val componentName = ComponentName(context, NotificationListener::class.java)
+                    val controllers = mediaSessionManager.getActiveSessions(componentName)
+                    updateController(controllers)
+                }
+                delay(5000) // Alle 5 Sekunden prüfen, ob die Session jetzt da ist
+            }
+        }
+    }
 
-        youTubeMusicController = controllers.firstOrNull {
+    private fun updateController(controllers: List<MediaController>?) {
+        val newController = controllers?.firstOrNull {
             it.packageName == Constants.YOUTUBE_MUSIC_PACKAGE_NAME
         }
 
-        youTubeMusicController?.registerCallback(
-            youTubeMusicCallback,
-            Handler(Looper.getMainLooper())
-        )
-        Log.d("RykerDeviceService", "Youtube Controller Registered")
-
-        // Aktuelle Metadaten sofort abrufen
-        val currentMetadata = youTubeMusicController?.metadata
-        val title = currentMetadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
-        val artist = currentMetadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
-        //val album = currentMetadata?.getString(MediaMetadata.METADATA_KEY_ALBUM)
-        val trackLength = currentMetadata?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.toInt() ?: -1
-
-        val playbackState = youTubeMusicController?.playbackState
-        val isPlaying = playbackState?.state == PlaybackState.STATE_PLAYING
-        val trackPosition = playbackState?.position?.toInt() ?: -1
-
-        if (title != null) {
-            RykerConnectApplication.music.track.value = title
+        if (newController == null) {
+            Log.v("YouTubeMusicManager", "No YT Music session in list of ${controllers?.size} sessions")
+            return
         }
 
-        if (artist != null) {
-            RykerConnectApplication.music.artist.value = artist
+        if (newController.sessionToken != youTubeMusicController?.sessionToken) {
+            Log.i("YouTubeMusicManager", "New YouTube Music session detected")
+            
+            youTubeMusicController?.let { old ->
+                youTubeMusicCallback?.let { old.unregisterCallback(it) }
+            }
+
+            youTubeMusicController = newController
+            youTubeMusicCallback = YouTubeMusicMediaControllerCallback(youtubeMusicListener)
+            youTubeMusicController?.registerCallback(youTubeMusicCallback!!, handler)
+            
+            // Initialen Stand sofort auslesen
+            val meta = newController.metadata
+            val playback = newController.playbackState
+            
+            youtubeMusicListener.onMetadataChanged(
+                meta?.getString(MediaMetadata.METADATA_KEY_TITLE),
+                meta?.getString(MediaMetadata.METADATA_KEY_ARTIST),
+                meta?.getString(MediaMetadata.METADATA_KEY_ALBUM),
+                meta?.getLong(MediaMetadata.METADATA_KEY_DURATION)?.toInt() ?: -1
+            )
+            
+            youtubeMusicListener.onPlaybackStateChanged(
+                playback?.state == PlaybackState.STATE_PLAYING,
+                playback?.position?.toInt() ?: -1
+            )
         }
-
-        RykerConnectApplication.music.length.value = trackLength
-        RykerConnectApplication.music.position.value = trackPosition
-        RykerConnectApplication.music.state.value = isPlaying
-
-        updateMetaData(playing =  isPlaying, trackPosition = trackPosition, trackLength = trackLength, trackName = title, artistName = artist)
     }
 
     fun destroy() {
-        youTubeMusicController?.unregisterCallback(youTubeMusicCallback)
+        try {
+            pollingJob?.cancel()
+            managerScope.cancel()
+            mediaSessionManager.removeOnActiveSessionsChangedListener(sessionListener)
+            youTubeMusicController?.let { ctrl ->
+                youTubeMusicCallback?.let { ctrl.unregisterCallback(it) }
+            }
+        } catch (e: Exception) {
+            Log.e("YouTubeMusicManager", "Error in destroy: ${e.message}")
+        }
     }
 }

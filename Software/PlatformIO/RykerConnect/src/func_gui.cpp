@@ -284,7 +284,7 @@ void drawResetPopup(){
 #pragma region MUSICUI
 #define btnSize 14
 void drawPlay(int pos_x, int pos_y){
-  u8g2_0.drawTriangle(pos_x, pos_y, pos_x, pos_y-btnSize, pos_x+btnSize/2, pos_y-btnSize/2);}
+  drawTriangle(pos_x, pos_y, pos_x, pos_y-btnSize-1, pos_x+btnSize/2, pos_y-btnSize/2);}
 void drawPause(int pos_x, int pos_y){
   drawBox(pos_x, pos_y-btnSize, btnSize/3 ,btnSize);
   drawBox(pos_x+(btnSize/3)*2, pos_y-btnSize, btnSize/3 ,btnSize);}
@@ -331,7 +331,7 @@ String getScrollString(uint8_t pos, String value, bool *en, uint8_t *i, unsigned
         }
         value = value.substring(*i , value.length());
       }
-  }else if(u8g2_current->getUTF8Width(value.substring(*i-1 , value.length()).c_str())>width_avail && *en){
+  }else if(*i > 0 && u8g2_current->getUTF8Width(value.substring(*i-1 , value.length()).c_str())>width_avail && *en){
         *interval = FIRSTSCROLL_INTERVAL;
         //D_println(((String)value[*i]+(String)value[*i+1]));
         if(value.charAt(*i) == 0xC3 && value.charAt(*i+1) == 0xBC) {   // ü == 0xC3BC
