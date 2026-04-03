@@ -1,6 +1,5 @@
 package de.chaostheorybot.rykerconnect.ui.screens.homescreen
 
-import android.annotation.SuppressLint
 import android.app.Application
 import android.bluetooth.BluetoothDevice
 import android.graphics.drawable.AnimationDrawable
@@ -18,6 +17,7 @@ import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getBatteryLevel
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getConnectionStatus
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getDevice
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getPairedDeviceList
+import de.chaostheorybot.rykerconnect.logic.PermissionUtils
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
@@ -73,8 +73,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application){
         isBLDeviceDialogShown = false
     }
 
-    @SuppressLint("MissingPermission")
     fun onConfirmBLDeviceDialog(){
+        if (!PermissionUtils.hasBluetoothConnect(getApplication())) return
         val store = RykerConnectStore(getApplication())
         isBLDeviceDialogShown = false
         selectedMac = selectedMacTMP
@@ -96,8 +96,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application){
         return getPairedDeviceList(application = getApplication())
     }
 
-    @SuppressLint("MissingPermission")
     fun getIntercomDeviceName(mac: String = selectedMac): String {
+        if (!PermissionUtils.hasBluetoothConnect(getApplication())) return selectedName
         if(intercomDevice == null && mac.isNotEmpty() && mac != "__EMPTY__"){
             intercomDevice = getDevice(getApplication(), mac)
             selectedName = intercomDevice?.name ?: "Unknown"

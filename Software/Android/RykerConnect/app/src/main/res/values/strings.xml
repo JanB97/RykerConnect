@@ -8,10 +8,37 @@
     <string name="service_name">&service_name;</string>
     <string name="companion_service_name">CompanionDeviceService</string>
     <string name="str_main_activity_top">&appname; Setup</string>
-    <string name="str_test">Setting up the &appname; App and Service for you!</string>
-    <string name="str_test2">We need some Permissions for the App to work, please allow the following permissions…</string>
+    <string name="str_test">&appname; einrichten</string>
+    <string name="str_test2">Damit &appname; richtig funktioniert, werden einige Berechtigungen benötigt. Im Folgenden erklären wir dir, warum jede einzelne Berechtigung nötig ist.</string>
     <string name="str_main_device">Ryker - Main unit</string>
     <string name="str_sel_device">Select Device</string>
+
+    <!-- Onboarding Steps -->
+    <string name="setup_step1_title">Schritt 1: Bluetooth</string>
+    <string name="setup_step1_desc">RykerConnect verbindet sich per Bluetooth mit deinem Display. Damit das funktioniert, brauchen wir die Berechtigung, Bluetooth-Geräte zu verbinden und nach ihnen zu suchen.</string>
+    <string name="setup_step1_button">Bluetooth erlauben</string>
+
+    <string name="setup_step2_title">Schritt 2: Standort</string>
+    <string name="setup_step2_desc">Android benötigt die Standortberechtigung, um Bluetooth-Geräte in deiner Nähe erkennen zu können. Dein Standort wird dabei weder gespeichert noch weitergegeben.</string>
+    <string name="setup_step2_button">Standort erlauben</string>
+
+    <string name="setup_step3_title">Schritt 3: Telefonstatus</string>
+    <string name="setup_step3_desc">Um die Netzwerkverbindung (4G/5G) und Signalstärke auf deinem Helm-Display anzeigen zu können, benötigt die App Zugriff auf den Telefonstatus.</string>
+    <string name="setup_step3_button">Telefonstatus erlauben</string>
+
+    <string name="setup_step4_title">Schritt 4: Benachrichtigungen</string>
+    <string name="setup_step4_desc">Damit RykerConnect im Hintergrund stabil läuft und dich über den Verbindungsstatus informieren kann, wird die Berechtigung für Benachrichtigungen benötigt.</string>
+    <string name="setup_step4_button">Benachrichtigungen erlauben</string>
+
+    <string name="setup_step5_title">Schritt 5: App-Einstellungen</string>
+    <string name="setup_step5_desc">Bitte überprüfe in den App-Einstellungen, dass alle Berechtigungen korrekt erteilt sind. Insbesondere der Hintergrund-Standort ist wichtig, damit die Verbindung auch im Hintergrund gehalten werden kann.</string>
+    <string name="setup_step5_button">Einstellungen öffnen</string>
+
+    <string name="setup_step6_title">Schritt 6: Benachrichtigungszugriff</string>
+    <string name="setup_step6_desc">Damit Benachrichtigungen von anderen Apps (WhatsApp, Anrufe, etc.) auf deinem Helm-Display angezeigt werden können, muss der Benachrichtigungszugriff aktiviert werden.</string>
+    <string name="setup_step6_button">Zugriff aktivieren</string>
+
+    <string name="setup_complete">Einrichtung abschließen</string>
 
     <string name="str_local_notificationlistener_intent">de.chaostheorybot.rykerconnect.services.NOTIFICATION_LISTENER</string>
     <string name="str_local_spotifylistener_intent_metadata">de.chaostheorybot.rykerconnect.services.SPOTIFY_LISTENER.METADATA</string>

@@ -78,7 +78,7 @@ class NetworkTypeMonitor(private val context: Context) {
         bleInfoSignal = telephonyManager.signalStrength?.level ?: 0
         
         // Versuche initialen Typ zu raten/abzufragen (Android 12+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && ActivityCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED) {
             bleInfoType = when (telephonyManager.dataNetworkType) {
                 TelephonyManager.NETWORK_TYPE_LTE -> 6
                 TelephonyManager.NETWORK_TYPE_NR -> 8

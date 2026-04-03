@@ -1,6 +1,5 @@
 package de.chaostheorybot.rykerconnect
 
-import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.le.ScanResult
 import android.companion.AssociationInfo
@@ -34,6 +33,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import de.chaostheorybot.rykerconnect.logic.BLEDeviceConnection
+import de.chaostheorybot.rykerconnect.logic.PermissionUtils
 import de.chaostheorybot.rykerconnect.ui.screens.homescreen.HomeScreen
 import de.chaostheorybot.rykerconnect.ui.screens.setupscreen.SetupScreen
 import de.chaostheorybot.rykerconnect.ui.theme.RykerConnectTheme
@@ -48,7 +48,6 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result -> handleCompanionResult(result) }
 
-    @SuppressLint("MissingPermission")
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -84,8 +83,8 @@ class MainActivity : ComponentActivity() {
         companionLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
     }
 
-    @SuppressLint("MissingPermission")
     fun setupCompanion(store: RykerConnectStore) {
+        if (!PermissionUtils.hasBluetoothConnect(this)) return
         lifecycleScope.launch {
             val deviceManager = getSystemService(COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
             val macAddressToPair = store.getBLEMACToken.firstOrNull() ?: return@launch
@@ -211,8 +210,8 @@ class MainActivity : ComponentActivity() {
         }, null)
     }
 
-    @SuppressLint("MissingPermission")
     private fun handleCompanionResult(result: androidx.activity.result.ActivityResult) {
+        if (!PermissionUtils.hasBluetoothConnect(this)) return
         if (result.resultCode == RESULT_OK) {
             val data = result.data ?: return
             // EXTRA_DEVICE deprecated in API 34, but needed for pre-33 result handling (minSdk 31)

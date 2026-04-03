@@ -1,6 +1,5 @@
 package de.chaostheorybot.rykerconnect.services
 
-import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.bluetooth.BluetoothDevice
@@ -26,6 +25,7 @@ import de.chaostheorybot.rykerconnect.logic.BLEDeviceConnection
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getBatteryLevel
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getDevice
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.waitForBLEConnection
+import de.chaostheorybot.rykerconnect.logic.PermissionUtils
 import kotlinx.coroutines.*
 
 class RykerDeviceService : CompanionDeviceService() {
@@ -79,8 +79,11 @@ class RykerDeviceService : CompanionDeviceService() {
         info.deviceMacAddress?.toString()?.let { initDeviceConnection(it) }
     }
 
-    @SuppressLint("MissingPermission")
     private fun initDeviceConnection(address: String) {
+        if (!PermissionUtils.hasBluetoothConnect(this)) {
+            Log.w("RykerDeviceService", "BLUETOOTH_CONNECT nicht erteilt, Verbindung abgebrochen")
+            return
+        }
         val store = RykerConnectStore(this)
         
         try {

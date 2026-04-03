@@ -1,6 +1,5 @@
 package de.chaostheorybot.rykerconnect.services
 
-import android.annotation.SuppressLint
 import android.app.Application
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
@@ -13,6 +12,7 @@ import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import de.chaostheorybot.rykerconnect.logic.BLEDeviceConnection
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic
+import de.chaostheorybot.rykerconnect.logic.PermissionUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -23,8 +23,8 @@ import kotlinx.coroutines.runBlocking
 
 class BluetoothConnectReceiver: BroadcastReceiver() {
 
-    @SuppressLint("MissingPermission")
     override fun onReceive(context: Context?, intent: Intent?) {
+        if (context != null && !PermissionUtils.hasBluetoothConnect(context)) return
 
         val action = intent?.action
         when(action){

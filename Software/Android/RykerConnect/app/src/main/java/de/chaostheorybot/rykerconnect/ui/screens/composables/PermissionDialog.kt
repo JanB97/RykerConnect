@@ -6,7 +6,6 @@ import androidx.compose.material3.Button
 import androidx.compose.ui.Modifier
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import kotlin.reflect.KFunction0
 
 @Composable
 fun PermissionDialog(
@@ -22,11 +21,11 @@ fun PermissionDialog(
             modifier = Modifier.fillMaxWidth(),
             onClick = { onOkClick() }
         ) {
-            Text("Okay")
+            Text(if (isPermanentlyDeclined) "Einstellungen öffnen" else "Berechtigung erteilen")
         }
              },
         title = {
-            Text(text = "Permission required")
+            Text(text = "Berechtigung erforderlich")
                 },
         text = {
             Text(text = permissionTextProvider.getDescription(isPermanentlyDeclined = isPermanentlyDeclined))
@@ -35,16 +34,31 @@ fun PermissionDialog(
         )
 }
 
-interface  PermissionTextProvider{
+interface PermissionTextProvider{
     fun getDescription(isPermanentlyDeclined: Boolean): String
 }
 
 class BluetoothPermissionProvider: PermissionTextProvider{
     override fun getDescription(isPermanentlyDeclined: Boolean): String {
         return if(isPermanentlyDeclined){
-            "Go to app Settings to grand Bluetooth Permission"
+            "Die Bluetooth-Berechtigung wurde dauerhaft abgelehnt. " +
+                "Bitte öffne die App-Einstellungen und erteile die Berechtigung manuell, " +
+                "damit sich die App mit deinem RykerConnect-Gerät verbinden kann."
         }else{
-            "This app need Bluetooth connection"
+            "RykerConnect benötigt Bluetooth, um sich mit deinem Helm-Display zu verbinden " +
+                "und Daten wie Benachrichtigungen, Musik und Akkustand zu übertragen."
+        }
+    }
+}
+
+class BluetoothScanPermissionProvider: PermissionTextProvider{
+    override fun getDescription(isPermanentlyDeclined: Boolean): String {
+        return if(isPermanentlyDeclined){
+            "Die Berechtigung zum Scannen nach Bluetooth-Geräten wurde dauerhaft abgelehnt. " +
+                "Bitte öffne die App-Einstellungen und erteile die Berechtigung manuell."
+        }else{
+            "RykerConnect muss nach Bluetooth-Geräten in der Nähe suchen können, " +
+                "um dein Helm-Display zu finden und die Erstverbindung herzustellen."
         }
     }
 }
@@ -52,9 +66,12 @@ class BluetoothPermissionProvider: PermissionTextProvider{
 class LocationPermissionProvider: PermissionTextProvider{
     override fun getDescription(isPermanentlyDeclined: Boolean): String {
         return if(isPermanentlyDeclined){
-            "Go to app Settings to grand Bluetooth Permission"
+            "Die Standort-Berechtigung wurde dauerhaft abgelehnt. " +
+                "Bitte öffne die App-Einstellungen und erteile die Berechtigung manuell. " +
+                "Ohne Standortzugriff können keine Bluetooth-Geräte in der Nähe gefunden werden."
         }else{
-            "This app need Location connection"
+            "Android erfordert den Standortzugriff, damit Bluetooth-Geräte in deiner Nähe " +
+                "erkannt werden können. Dein Standort wird nicht gespeichert oder weitergegeben."
         }
     }
 }
@@ -62,9 +79,24 @@ class LocationPermissionProvider: PermissionTextProvider{
 class NotificationPermissionProvider: PermissionTextProvider{
     override fun getDescription(isPermanentlyDeclined: Boolean): String {
         return if(isPermanentlyDeclined){
-            "Go to app Settings to grand Bluetooth Permission"
+            "Die Benachrichtigungs-Berechtigung wurde dauerhaft abgelehnt. " +
+                "Bitte öffne die App-Einstellungen und erteile die Berechtigung manuell, " +
+                "damit der Hintergrund-Service korrekt funktioniert."
         }else{
-            "This app need Notification connection"
+            "RykerConnect benötigt die Benachrichtigungs-Berechtigung, um den Hintergrund-Service " +
+                "stabil laufen zu lassen und dich über den Verbindungsstatus zu informieren."
+        }
+    }
+}
+
+class PhoneStatePermissionProvider: PermissionTextProvider{
+    override fun getDescription(isPermanentlyDeclined: Boolean): String {
+        return if(isPermanentlyDeclined){
+            "Die Telefonstatus-Berechtigung wurde dauerhaft abgelehnt. " +
+                "Bitte öffne die App-Einstellungen und erteile die Berechtigung manuell."
+        }else{
+            "RykerConnect nutzt den Telefonstatus, um die aktuelle Netzwerkverbindung (4G/5G) " +
+                "und Signalstärke auf deinem Helm-Display anzuzeigen."
         }
     }
 }

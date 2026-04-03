@@ -9,13 +9,9 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothStatusCodes
 import android.content.Context
-import android.content.Context.BATTERY_SERVICE
-import android.content.pm.PackageManager
-import android.os.BatteryManager
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresPermission
-import androidx.core.app.ActivityCompat
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,7 +34,8 @@ val TIME_UUID: UUID = UUID.fromString("a41dcc81-d45e-4445-99bb-38c37c1ef1c8")
 val FIRMWARE_RESET_UUID: UUID = UUID.fromString("18cb54fe-45e8-4819-a262-24b731c8b236")
 val FIRMWARE_UPDATE_UUID: UUID = UUID.fromString("1d1306c5-98d9-4998-8dfd-35136295575f")
 
-class BLEDeviceConnection @RequiresPermission("PERMISSION_BLUETOOTH_CONNECT") constructor(
+@SuppressLint("MissingPermission") // Permission wird an allen Aufrufstellen via PermissionUtils geprüft
+class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT) constructor(
     private val context: Context,
     private val bluetoothDevice: BluetoothDevice
 ) {
@@ -96,15 +93,15 @@ class BLEDeviceConnection @RequiresPermission("PERMISSION_BLUETOOTH_CONNECT") co
         return characteristic
     }
 
-    @SuppressLint("MissingPermission")
     fun connect() {
+        if (!PermissionUtils.hasBluetoothConnect(context)) return
         if (gatt == null) {
             gatt = bluetoothDevice.connectGatt(context, false, callback)
         }
     }
 
-    @SuppressLint("MissingPermission")
     fun disconnect() {
+        if (!PermissionUtils.hasBluetoothConnect(context)) return
         gatt?.disconnect()
         gatt?.close()
         gatt = null

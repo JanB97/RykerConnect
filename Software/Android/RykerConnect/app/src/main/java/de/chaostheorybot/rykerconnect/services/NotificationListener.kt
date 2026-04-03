@@ -1,6 +1,5 @@
 package de.chaostheorybot.rykerconnect.services
 
-import android.annotation.SuppressLint
 import android.app.Notification
 import android.content.pm.PackageManager
 import android.service.notification.NotificationListenerService
@@ -10,6 +9,7 @@ import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import de.chaostheorybot.rykerconnect.logic.BLEDeviceConnection
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getDevice
+import de.chaostheorybot.rykerconnect.logic.PermissionUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,7 +26,6 @@ class NotificationListener : NotificationListenerService() {
     private val notifyList: MutableList<NotifyListClass> = ArrayList()
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    @SuppressLint("MissingPermission")
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
 
@@ -65,6 +64,9 @@ class NotificationListener : NotificationListenerService() {
 
                         // An BLE senden, wenn aktiv
                         if (store.getBLEAppear() == true) {
+                            // Permission-Check vor BLE-Zugriff
+                            if (!PermissionUtils.hasBluetoothConnect(applicationContext)) return@launch
+
                             var connection = RykerConnectApplication.activeConnection.value
                             
                             // Falls keine Verbindung da ist, versuchen wir sie aufzubauen

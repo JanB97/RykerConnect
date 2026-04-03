@@ -1,7 +1,6 @@
 package de.chaostheorybot.rykerconnect.logic
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.app.Application
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
@@ -31,8 +30,8 @@ object BluetoothLogic {
     }
 
 
-    @SuppressLint("MissingPermission")
     fun getDevice(application: Application, deviceAddress: String): BluetoothDevice? {
+        if (!PermissionUtils.hasBluetoothConnect(application)) return null
         return try {
             val bMan = application.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
             val bAdapter = bMan.adapter

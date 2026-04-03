@@ -8,7 +8,6 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.compose.runtime.mutableStateListOf
-import androidx.core.content.ContextCompat.startActivity
 import androidx.lifecycle.AndroidViewModel
 
 
@@ -17,6 +16,7 @@ class SetupViewModel(application: Application) : AndroidViewModel(application) {
     val visiblePermissionDialogQueue = mutableStateListOf<String>()
     private val permissionToRequest: Array<String?> = arrayOf(
         Manifest.permission.BLUETOOTH_CONNECT,
+        Manifest.permission.BLUETOOTH_SCAN,
         Manifest.permission.ACCESS_COARSE_LOCATION,
         if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)Manifest.permission.POST_NOTIFICATIONS else null,
         Manifest.permission.READ_PHONE_STATE
@@ -36,9 +36,10 @@ class SetupViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
     fun openAppSettings(context: Context){
-        val intent = Intent(Settings.ACTION_APPLICATION_SETTINGS)
-        //val uri = Uri.fromParts("package", context.packageName, null)
-        //intent.setData(uri)
+        val intent = Intent(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.fromParts("package", context.packageName, null)
+        )
         context.startActivity(intent)
     }
     fun openNotificationSettings(context: Context){
