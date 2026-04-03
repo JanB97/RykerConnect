@@ -56,20 +56,24 @@ class BLEDeviceConnection @RequiresPermission("PERMISSION_BLUETOOTH_CONNECT") co
             super.onConnectionStateChange(gatt, status, newState)
             val connected = newState == BluetoothGatt.STATE_CONNECTED
             if (connected) {
-                gatt.discoverServices()
+                Log.d("BLE", "Connected, requesting MTU 512...")
+                gatt.requestMtu(512)
             } else {
                 charCache.clear()
                 services.value = emptyList()
             }
             isConnected.value = connected
-            Log.d("BLE", "ConnectionState: $newState, status: $status")
+        }
+
+        override fun onMtuChanged(gatt: BluetoothGatt?, mtu: Int, status: Int) {
+            super.onMtuChanged(gatt, mtu, status)
+            gatt?.discoverServices()
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
             super.onServicesDiscovered(gatt, status)
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 services.value = gatt.services
-                Log.d("BLE", "Services discovered: ${gatt.services.size}")
             }
         }
 
@@ -95,7 +99,6 @@ class BLEDeviceConnection @RequiresPermission("PERMISSION_BLUETOOTH_CONNECT") co
     @SuppressLint("MissingPermission")
     fun connect() {
         if (gatt == null) {
-            Log.d("BLE", "Connecting to ${bluetoothDevice.address}")
             gatt = bluetoothDevice.connectGatt(context, false, callback)
         }
     }
@@ -140,7 +143,7 @@ class BLEDeviceConnection @RequiresPermission("PERMISSION_BLUETOOTH_CONNECT") co
                     if (initiated) {
                         if (noResponse) {
                             success = true
-                            delay(30) // Schutz-Delay für den ESP32
+                            delay(20) 
                         } else {
                             val status = withTimeoutOrNull(1000) { deferred.await() }
                             if (status == BluetoothGatt.GATT_SUCCESS) success = true
@@ -159,7 +162,6 @@ class BLEDeviceConnection @RequiresPermission("PERMISSION_BLUETOOTH_CONNECT") co
 
     fun syncAll() {
         scope.launch {
-            Log.d("BLE", "Syncing all data...")
             writeTime()
             delay(150)
             writePhoneBattery(RykerConnectApplication.phoneBatteryLevel, RykerConnectApplication.phoneBatteryCharging)
@@ -174,15 +176,22 @@ class BLEDeviceConnection @RequiresPermission("PERMISSION_BLUETOOTH_CONNECT") co
             }
             val music = RykerConnectApplication.music
             writeMediaData(music.state.value, music.position.value / 1000, music.length.value / 1000, music.track.value, music.artist.value)
-            Log.d("BLE", "Sync done")
         }
     }
 
     fun writeMediaData(playstate: Boolean, position: Int, trackLength: Int, title: String?, artist: String?) {
-        val dataToSend = byteArrayOf(if (playstate) 0x01 else 0x00) + 
-            ByteBuffer.allocate(2).putShort(position.toShort()).array() + 
-            ByteBuffer.allocate(2).putShort(trackLength.toShort()).array() +
-            (if (!title.isNullOrEmpty()) (title.toByteArray() + 0x03.toByte() + (artist ?: "").toByteArray()) else byteArrayOf())
+        // ZURÜCK AUF BIG ENDIAN (Android Default) für Musik-Header
+        val header = ByteBuffer.allocate(5).apply {
+            order(ByteOrder.BIG_ENDIAN)
+            put(if (playstate) 0x01.toByte() else 0x00.toByte())
+            putShort(position.toShort())
+            putShort(trackLength.toShort())
+        }.array()
+
+        var dataToSend = header
+        if (!title.isNullOrEmpty()) {
+            dataToSend += title.toByteArray(Charsets.UTF_8) + 0x03.toByte() + (artist ?: "").toByteArray(Charsets.UTF_8)
+        }
         
         writeCharacteristics(MEDIA_DATA_UUID, dataToSend, noResponse = true)
     }
@@ -216,6 +225,7 @@ class BLEDeviceConnection @RequiresPermission("PERMISSION_BLUETOOTH_CONNECT") co
     }
 
     fun sendFactoryReset(pin: Int) {
+        // BLEIBT LITTLE ENDIAN wie angefordert
         val data = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(pin.toShort()).array()
         writeCharacteristics(FIRMWARE_RESET_UUID, data)
     }
@@ -225,6 +235,6 @@ class BLEDeviceConnection @RequiresPermission("PERMISSION_BLUETOOTH_CONNECT") co
         if (!url.isNullOrEmpty()) {
             command += "\u0003$url"
         }
-        writeCharacteristics(FIRMWARE_UPDATE_UUID, command.toByteArray())
+        writeCharacteristics(FIRMWARE_UPDATE_UUID, command.toByteArray(Charsets.UTF_8))
     }
 }

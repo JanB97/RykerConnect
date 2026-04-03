@@ -23,7 +23,6 @@ import androidx.compose.ui.unit.times
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import de.chaostheorybot.rykerconnect.R
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
-import de.chaostheorybot.rykerconnect.Screen
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import de.chaostheorybot.rykerconnect.ui.screens.homescreen.SelectDeviceButton
 import kotlinx.coroutines.CoroutineScope
@@ -35,8 +34,9 @@ fun MainUnitCard(
     mainUnitDrawable: AnimationDrawable,
     mainUnitClick: () -> Unit,
     companion: () -> Unit,
+    isAssociated: Boolean,
     isConnected: Boolean,
-    onNavigateToSettings: () -> Unit = {}
+    onNavigateToUpdate: () -> Unit
 ) {
 
     val context = LocalContext.current
@@ -82,10 +82,10 @@ fun MainUnitCard(
                     .padding(bottom = 6.dp)
             )
             
-            val buttonText = if (isConnected) "Reselect Device" else stringResource(id = R.string.str_sel_device)
+            val buttonText = if (isAssociated) "Reselect Device" else stringResource(id = R.string.str_sel_device)
             
             SelectDeviceButton(buttonText, onClick = {
-                if (isConnected) {
+                if (isAssociated) {
                     CoroutineScope(Dispatchers.Main).launch {
                         try {
                             val deviceManager = context.getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
@@ -108,36 +108,35 @@ fun MainUnitCard(
                 }
             })
 
-            if (isConnected) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { 
+                        RykerConnectApplication.activeConnection.value?.sendFactoryReset(0)
+                        showResetDialog = true 
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = isConnected,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = if (isConnected) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f))
                 ) {
-                    OutlinedButton(
-                        onClick = { 
-                            RykerConnectApplication.activeConnection.value?.sendFactoryReset(0)
-                            showResetDialog = true 
-                        },
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
-                    ) {
-                        Icon(Icons.Default.RestartAlt, contentDescription = null)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Reset")
-                    }
-                    
-                    OutlinedButton(
-                        onClick = { onNavigateToSettings() },
-                        modifier = Modifier.weight(1f),
-                        enabled = true
-                    ) {
-                        Icon(Icons.Default.SystemUpdate, contentDescription = null)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Update")
-                    }
+                    Icon(Icons.Default.RestartAlt, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Reset")
+                }
+                
+                OutlinedButton(
+                    onClick = { onNavigateToUpdate() },
+                    modifier = Modifier.weight(1f),
+                    enabled = isConnected
+                ) {
+                    Icon(Icons.Default.SystemUpdate, contentDescription = null)
+                    Spacer(Modifier.width(4.dp))
+                    Text("Update")
                 }
             }
         }
