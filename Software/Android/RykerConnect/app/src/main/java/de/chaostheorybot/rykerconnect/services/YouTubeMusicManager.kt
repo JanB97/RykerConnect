@@ -82,7 +82,8 @@ class YouTubeMusicManager(private val context: Context) {
                     
                     RykerConnectApplication.activeConnection.value?.writeMediaData(
                         playstate = finalPlaying,
-                        position = finalPos.plus(if (finalPlaying) 1 else 0),
+                        //position = finalPos.plus(if (finalPlaying) 1 else 0),
+                        position = finalPos,
                         trackLength = finalLen,
                         title = trackName ?: RykerConnectApplication.music.track.value,
                         artist = artistName ?: RykerConnectApplication.music.artist.value
