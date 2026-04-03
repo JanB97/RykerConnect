@@ -16,7 +16,8 @@ class RykerConnectApplication: Application() {
         var networkType: Byte = 0
         var intercomBattery: Byte = -1
         
-        val MainUnitConnected = MutableStateFlow<Boolean>(false)
+        @Suppress("unused")
+        val mainUnitConnected = MutableStateFlow<Boolean>(false)
     }
 
     override fun onCreate() {

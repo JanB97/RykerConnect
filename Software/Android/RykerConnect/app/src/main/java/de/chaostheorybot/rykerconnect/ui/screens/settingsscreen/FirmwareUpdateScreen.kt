@@ -3,22 +3,31 @@ package de.chaostheorybot.rykerconnect.ui.screens.settingsscreen
 import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Environment
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.core.net.toUri
 import androidx.navigation.NavController
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
@@ -31,18 +40,22 @@ import org.json.JSONArray
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(nav: NavController, store: RykerConnectStore) {
+fun FirmwareUpdateScreen(nav: NavController, store: RykerConnectStore) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    
+
     val autoDownload = store.getFwAutoDownload.collectAsState(initial = true)
     val fwVersion = store.getFwVersion.collectAsState(initial = "V0001")
     val useHotspot = store.getFwUseHotspot.collectAsState(initial = false)
     val wlanSsid = store.getFwWlanSsid.collectAsState(initial = "")
     val wlanPwd = store.getFwWlanPwd.collectAsState(initial = "")
-    
+
+    var passwordVisible by remember { mutableStateOf(false) }
     var versions by remember { mutableStateOf(listOf("V0001")) }
     var isFetching by remember { mutableStateOf(false) }
+
+    val activeConnection by RykerConnectApplication.activeConnection.collectAsState()
+    val isBleConnected by (activeConnection?.isConnected ?: remember { kotlinx.coroutines.flow.MutableStateFlow(false) }).collectAsState()
 
     LaunchedEffect(Unit) {
         isFetching = true
@@ -53,9 +66,9 @@ fun SettingsScreen(nav: NavController, store: RykerConnectStore) {
                 val request = Request.Builder()
                     .url(url)
                     .header("Accept", "application/vnd.github+json")
-                    .header("User-Agent", "RykerConnect-App") 
+                    .header("User-Agent", "RykerConnect-App")
                     .build()
-                
+
                 val response: Response = client.newCall(request).execute()
                 response.use { resp ->
                     if (resp.isSuccessful) {
@@ -81,7 +94,7 @@ fun SettingsScreen(nav: NavController, store: RykerConnectStore) {
                     }
                 }
             } catch (e: Exception) {
-                Log.e("SettingsScreen", "Fetch versions failed", e)
+                Log.e("FirmwareUpdateScreen", "Fetch versions failed", e)
             } finally {
                 isFetching = false
             }
@@ -91,10 +104,10 @@ fun SettingsScreen(nav: NavController, store: RykerConnectStore) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text("Firmware Update") },
                 navigationIcon = {
                     IconButton(onClick = { nav.popBackStack() }) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
@@ -104,11 +117,11 @@ fun SettingsScreen(nav: NavController, store: RykerConnectStore) {
             modifier = Modifier
                 .padding(padding)
                 .padding(16.dp)
+                .fillMaxSize()
+                .imePadding()
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Text("Firmware Update", style = MaterialTheme.typography.titleLarge)
-            
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -119,7 +132,7 @@ fun SettingsScreen(nav: NavController, store: RykerConnectStore) {
                     onCheckedChange = { scope.launch { store.saveFwAutoDownload(it) } }
                 )
             }
-            
+
             Text("Version", style = MaterialTheme.typography.labelMedium)
             var expanded by remember { mutableStateOf(false) }
             Box {
@@ -143,8 +156,12 @@ fun SettingsScreen(nav: NavController, store: RykerConnectStore) {
                 }
             }
 
-            // Neuer Button zum Herunterladen der Datei für manuelles OTA
-            if (!autoDownload.value) {
+            // Button zum Herunterladen der Datei für manuelles OTA
+            AnimatedVisibility(
+                visible = !autoDownload.value,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
                 OutlinedButton(
                     onClick = { downloadFirmwareFile(context, fwVersion.value) },
                     modifier = Modifier.fillMaxWidth()
@@ -154,9 +171,9 @@ fun SettingsScreen(nav: NavController, store: RykerConnectStore) {
                     Text("Download .bin for manual update")
                 }
             }
-            
+
             HorizontalDivider()
-            
+
             Text("Connection Type", style = MaterialTheme.typography.labelMedium)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 RadioButton(
@@ -171,7 +188,7 @@ fun SettingsScreen(nav: NavController, store: RykerConnectStore) {
                 )
                 Text("Manual WLAN")
             }
-            
+
             OutlinedTextField(
                 value = wlanSsid.value,
                 onValueChange = { scope.launch { store.saveFwWlanSsid(it) } },
@@ -182,26 +199,42 @@ fun SettingsScreen(nav: NavController, store: RykerConnectStore) {
                 value = wlanPwd.value,
                 onValueChange = { scope.launch { store.saveFwWlanPwd(it) } },
                 label = { Text(if (useHotspot.value) "Hotspot Password" else "WLAN Password") },
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Icon(
+                            imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                        )
+                    }
+                },
                 modifier = Modifier.fillMaxWidth()
             )
-            
-            if (useHotspot.value) {
+
+            AnimatedVisibility(
+                visible = useHotspot.value,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
                 Text(
                     "Note: Ensure your Hotspot is active before starting the update.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary
                 )
             }
-            
+
             Button(
                 onClick = {
                     startFirmwareUpdate(context, autoDownload.value, fwVersion.value, wlanSsid.value, wlanPwd.value)
                 },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = RykerConnectApplication.activeConnection.value?.isConnected?.value == true
+                enabled = isBleConnected
             ) {
                 Text("Start Firmware Update")
             }
+
+            // Extra space at bottom so button is visible when keyboard is open
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }
@@ -209,7 +242,7 @@ fun SettingsScreen(nav: NavController, store: RykerConnectStore) {
 private fun downloadFirmwareFile(context: Context, version: String) {
     val url = "https://github.com/JanB97/RykerConnect/raw/main/Firmware/MainUnit_ESP32S3-REV01/${version}/firmware.bin"
     try {
-        val request = DownloadManager.Request(Uri.parse(url))
+        val request = DownloadManager.Request(url.toUri())
             .setTitle("Ryker Firmware $version")
             .setDescription("Downloading firmware.bin for manual update")
             .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
@@ -233,12 +266,18 @@ private fun startFirmwareUpdate(
     pwd: String
 ) {
     val downloadUrl = if (auto) "https://github.com/JanB97/RykerConnect/raw/main/Firmware/MainUnit_ESP32S3-REV01/${version}/firmware.bin" else null
-    
+
     RykerConnectApplication.activeConnection.value?.sendFirmwareUpdate(ssid, pwd, downloadUrl)
-    
+
     if (!auto) {
-        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse("http://RykerConnect.local"))
+        val browserIntent = Intent(Intent.ACTION_VIEW, "http://RykerConnect.local".toUri())
         browserIntent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
         context.startActivity(browserIntent)
     }
 }
+
+
+
+
+
+

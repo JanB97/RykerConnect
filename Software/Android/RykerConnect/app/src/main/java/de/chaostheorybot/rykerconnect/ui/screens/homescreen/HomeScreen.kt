@@ -1,11 +1,8 @@
 package de.chaostheorybot.rykerconnect.ui.screens.homescreen
 
-import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -97,10 +94,9 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
             item {
                 MainUnitCard(
                     mainUnitDrawable = viewModel.getRykerDrawable(),
-                    mainUnitClick = { viewModel.mainUnitClick() },
                     companion = companion,
                     isAssociated = isAssociated,
-                    isConnected = isBleConnected, // Nutzt jetzt den reaktiven Status
+                    isConnected = isBleConnected,
                     onNavigateToUpdate = { nav.navigate(Screen.SettingsScreen.route) }
                 )
             }

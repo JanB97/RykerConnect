@@ -1,70 +1,62 @@
 package de.chaostheorybot.rykerconnect
 
-import de.chaostheorybot.rykerconnect.services.NetworkTypeMonitor
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.le.ScanResult
 import android.companion.AssociationInfo
 import android.companion.AssociationRequest
 import android.companion.BluetoothLeDeviceFilter
 import android.companion.CompanionDeviceManager
-import android.content.Context
-import android.content.Intent
+import android.companion.ObservingDevicePresenceRequest
 import android.content.IntentSender
-import android.content.pm.PackageManager
-import android.net.MacAddress
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.unit.IntSize
-import androidx.core.view.WindowCompat
+import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import de.chaostheorybot.rykerconnect.logic.BLEDeviceConnection
-import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getDevice
 import de.chaostheorybot.rykerconnect.ui.screens.homescreen.HomeScreen
 import de.chaostheorybot.rykerconnect.ui.screens.servicescreen.CustomizeServiceScreen
 import de.chaostheorybot.rykerconnect.ui.screens.setupscreen.SetupScreen
-import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.SettingsScreen
+import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.FirmwareUpdateScreen
 import de.chaostheorybot.rykerconnect.ui.theme.RykerConnectTheme
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executor
 import java.util.regex.Pattern
 
-private const val SELECT_DEVICE_REQUEST_CODE = 0
-
 class MainActivity : ComponentActivity() {
+
+    private val companionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result -> handleCompanionResult(result) }
 
     @SuppressLint("MissingPermission")
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        WindowCompat.setDecorFitsSystemWindows(window, false)
         val store = RykerConnectStore(this)
 
         setContent {
-            val view = LocalView.current
-            val window = (view.context as Activity).window
             val navController = rememberNavController()
 
             RykerConnectTheme {
@@ -72,27 +64,23 @@ class MainActivity : ComponentActivity() {
                     val tokenValue = store.getFirstLaunchToken.collectAsState(initial = false)
                     NavHost(
                         navController = navController,
-                        startDestination = if (tokenValue.value) Screen.SetupScreen.route else Screen.HomeScreen.route
+                        startDestination = if (tokenValue.value) Screen.SetupScreen.route else Screen.HomeScreen.route,
+                        enterTransition = { slideInHorizontally(animationSpec = tween(350)) { it } + fadeIn(animationSpec = tween(350)) },
+                        exitTransition = { slideOutHorizontally(animationSpec = tween(350)) { -it / 3 } + fadeOut(animationSpec = tween(350)) },
+                        popEnterTransition = { slideInHorizontally(animationSpec = tween(350)) { -it / 3 } + fadeIn(animationSpec = tween(350)) },
+                        popExitTransition = { slideOutHorizontally(animationSpec = tween(350)) { it } + fadeOut(animationSpec = tween(350)) }
                     ) {
                         composable(route = Screen.SetupScreen.route) {
-                            val sColor = MaterialTheme.colorScheme.primaryContainer.toArgb()
-                            SideEffect { window.statusBarColor = sColor }
                             SetupScreen(nav = navController)
                         }
                         composable(route = Screen.HomeScreen.route) {
-                            val sColor = MaterialTheme.colorScheme.surface.toArgb()
-                            SideEffect { window.statusBarColor = sColor }
                             HomeScreen(store = store, nav = navController, companion = { setupCompanion(store) })
                         }
                         composable(route = Screen.ServiceScreen.route) {
-                            val sColor = MaterialTheme.colorScheme.surface.toArgb()
-                            SideEffect { window.statusBarColor = sColor }
                             CustomizeServiceScreen(nav = navController, store = store)
                         }
                         composable(route = Screen.SettingsScreen.route) {
-                            val sColor = MaterialTheme.colorScheme.surface.toArgb()
-                            SideEffect { window.statusBarColor = sColor }
-                            SettingsScreen(nav = navController, store = store)
+                            FirmwareUpdateScreen(nav = navController, store = store)
                         }
                     }
                 }
@@ -100,95 +88,154 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun isNotificationServiceEnabled(): Boolean {
-        val pkgName = packageName
-        val flat = Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
-        if (flat != null) {
-            val names = flat.split(":")
-            for (name in names) {
-                val cn = android.content.ComponentName.unflattenFromString(name)
-                if (cn != null && cn.packageName == pkgName) return true
-            }
-        }
-        return false
+    private fun launchIntentSender(intentSender: IntentSender) {
+        companionLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
     }
 
     @SuppressLint("MissingPermission")
     fun setupCompanion(store: RykerConnectStore) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            lifecycleScope.launch {
-                val deviceManager = getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
-                val macAddressToPair = store.getBLEMACToken.firstOrNull() ?: return@launch
-                
-                val deviceFilter = BluetoothLeDeviceFilter.Builder()
-                    .setNamePattern(Pattern.compile("RykerConnect"))
-                    .build()
+        lifecycleScope.launch {
+            val deviceManager = getSystemService(COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
+            val macAddressToPair = store.getBLEMACToken.firstOrNull() ?: return@launch
 
-                val pairingRequest = AssociationRequest.Builder()
-                    .addDeviceFilter(deviceFilter)
-                    .setSingleDevice(true)
-                    .build()
+            val deviceFilter = BluetoothLeDeviceFilter.Builder()
+                .setNamePattern(Pattern.compile("RykerConnect"))
+                .build()
 
-                var alreadyAssociated = false
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    for (info in deviceManager.myAssociations) {
-                        if (info.deviceMacAddress?.toString()?.equals(macAddressToPair, true) == true) {
-                            alreadyAssociated = true
-                            deviceManager.startObservingDevicePresence(info.deviceMacAddress.toString())
-                        }
-                    }
-                } else {
-                    @Suppress("DEPRECATION")
-                    for (address in deviceManager.associations) {
-                        if (address.equals(macAddressToPair, true)) {
-                            alreadyAssociated = true
-                            deviceManager.startObservingDevicePresence(address)
-                        }
+            val pairingRequest = AssociationRequest.Builder()
+                .addDeviceFilter(deviceFilter)
+                .setSingleDevice(true)
+                .build()
+
+            var alreadyAssociated = false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                alreadyAssociated = checkExistingAssociationsApi33(deviceManager, macAddressToPair)
+            } else {
+                // associations property deprecated in API 33, needed for minSdk 31 compat
+                @Suppress("DEPRECATION")
+                for (address in deviceManager.associations) {
+                    if (address.equals(macAddressToPair, true)) {
+                        alreadyAssociated = true
+                        // startObservingDevicePresence(String) deprecated in API 33, replacement requires CompanionDeviceService
+                        @Suppress("DEPRECATION")
+                        deviceManager.startObservingDevicePresence(address)
                     }
                 }
+            }
 
-                if (!alreadyAssociated) {
-                    val executor = Executor { it.run() }
-                    deviceManager.associate(pairingRequest, executor, object : CompanionDeviceManager.Callback() {
-                        override fun onAssociationPending(intentSender: IntentSender) {
-                            startIntentSenderForResult(intentSender, SELECT_DEVICE_REQUEST_CODE, null, 0, 0, 0)
-                        }
-
-                        override fun onAssociationCreated(associationInfo: AssociationInfo) {
-                            val macAddress = associationInfo.deviceMacAddress.toString()
-                            lifecycleScope.launch { store.saveBLEMAC(macAddress) }
-                            deviceManager.startObservingDevicePresence(macAddress)
-                        }
-
-                        @Deprecated("Legacy")
-                        override fun onDeviceFound(intentSender: IntentSender) {
-                            startIntentSenderForResult(intentSender, SELECT_DEVICE_REQUEST_CODE, null, 0, 0, 0)
-                        }
-
-                        override fun onFailure(errorMessage: CharSequence?) {
-                            Log.e("MainActivity", "Association failed: $errorMessage")
-                        }
-                    })
+            if (!alreadyAssociated) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    associateApi33(deviceManager, pairingRequest, store)
+                } else {
+                    associateLegacy(deviceManager, pairingRequest)
                 }
             }
         }
     }
 
-    @SuppressLint("MissingPermission")
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (requestCode == SELECT_DEVICE_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
-            val deviceToPair: ScanResult? = data?.getParcelableExtra(CompanionDeviceManager.EXTRA_DEVICE)
-            deviceToPair?.let { result ->
-                val connection = BLEDeviceConnection(application, result.device)
-                RykerConnectApplication.activeConnection.value = connection
-                connection.connect()
-                if (result.device.bondState == BluetoothDevice.BOND_NONE) {
-                    result.device.createBond()
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun checkExistingAssociationsApi33(
+        deviceManager: CompanionDeviceManager,
+        macAddressToPair: String
+    ): Boolean {
+        var found = false
+        for (info in deviceManager.myAssociations) {
+            if (info.deviceMacAddress?.toString()?.equals(macAddressToPair, true) == true) {
+                found = true
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+                    deviceManager.startObservingDevicePresence(
+                        ObservingDevicePresenceRequest.Builder()
+                            .setAssociationId(info.id)
+                            .build()
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    deviceManager.startObservingDevicePresence(info.deviceMacAddress.toString())
                 }
             }
-        } else {
-            super.onActivityResult(requestCode, resultCode, data)
+        }
+        return found
+    }
+
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    private fun associateApi33(
+        deviceManager: CompanionDeviceManager,
+        pairingRequest: AssociationRequest,
+        store: RykerConnectStore
+    ) {
+        val executor = Executor { it.run() }
+        deviceManager.associate(pairingRequest, executor, object : CompanionDeviceManager.Callback() {
+            override fun onAssociationPending(intentSender: IntentSender) {
+                launchIntentSender(intentSender)
+            }
+
+            override fun onAssociationCreated(associationInfo: AssociationInfo) {
+                val macAddress = associationInfo.deviceMacAddress.toString()
+                lifecycleScope.launch { store.saveBLEMAC(macAddress) }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+                    deviceManager.startObservingDevicePresence(
+                        ObservingDevicePresenceRequest.Builder()
+                            .setAssociationId(associationInfo.id)
+                            .build()
+                    )
+                } else {
+                    @Suppress("DEPRECATION")
+                    deviceManager.startObservingDevicePresence(macAddress)
+                }
+            }
+
+            @Deprecated("Legacy")
+            override fun onDeviceFound(intentSender: IntentSender) {
+                launchIntentSender(intentSender)
+            }
+
+            override fun onFailure(errorMessage: CharSequence?) {
+                Log.e("MainActivity", "Association failed: $errorMessage")
+            }
+        })
+    }
+
+    // associate(request, callback, handler) deprecated in API 33, needed for minSdk 31 compat
+    @Suppress("DEPRECATION")
+    private fun associateLegacy(
+        deviceManager: CompanionDeviceManager,
+        pairingRequest: AssociationRequest
+    ) {
+        deviceManager.associate(pairingRequest, object : CompanionDeviceManager.Callback() {
+            override fun onAssociationPending(intentSender: IntentSender) {
+                launchIntentSender(intentSender)
+            }
+
+            override fun onAssociationCreated(associationInfo: AssociationInfo) {}
+
+            @Deprecated("Legacy")
+            override fun onDeviceFound(intentSender: IntentSender) {
+                launchIntentSender(intentSender)
+            }
+
+            override fun onFailure(errorMessage: CharSequence?) {
+                Log.e("MainActivity", "Association failed: $errorMessage")
+            }
+        }, null)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun handleCompanionResult(result: androidx.activity.result.ActivityResult) {
+        if (result.resultCode == RESULT_OK) {
+            val data = result.data ?: return
+            // EXTRA_DEVICE deprecated in API 34, but needed for pre-33 result handling (minSdk 31)
+            @Suppress("DEPRECATION")
+            val scanResult = IntentCompat.getParcelableExtra(
+                data, CompanionDeviceManager.EXTRA_DEVICE, ScanResult::class.java
+            )
+            scanResult?.let {
+                val connection = BLEDeviceConnection(application, it.device)
+                RykerConnectApplication.activeConnection.value = connection
+                connection.connect()
+                if (it.device.bondState == BluetoothDevice.BOND_NONE) {
+                    it.device.createBond()
+                }
+            }
         }
     }
 }

@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.app.Application
 import android.bluetooth.BluetoothDevice
 import android.graphics.drawable.AnimationDrawable
-import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -19,6 +18,7 @@ import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getBatteryLevel
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getConnectionStatus
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getDevice
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getPairedDeviceList
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 private val _onDrawable = R.drawable.rykeranim_on
@@ -45,8 +45,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application){
     private val drwOff = application.getDrawable(_offDrawable) as AnimationDrawable
     private var rykerDrawable = mutableStateOf(drwOff)
     
-    var intercomBatLvl: Int by mutableIntStateOf(0)
+    var intercomBatLvl: Int by mutableIntStateOf(-1)
         private set
+
+    init {
+        // Letzten gespeicherten Akkustand laden
+        viewModelScope.launch {
+            val store = RykerConnectStore(getApplication())
+            val savedBattery = store.getIntercomBatteryToken.first()
+            if (savedBattery >= 0) {
+                intercomBatLvl = savedBattery
+            }
+        }
+    }
 
     fun intercomClick(){
         updateIntercomConnected(!intercomConnected)
@@ -116,12 +127,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application){
     fun setBatteryStatus(){
         val level = try {
             getBatteryLevel(intercomDevice)
-        } catch(e: Exception){
+        } catch(_: Exception){
             -1
         }
-        intercomBatLvl = level
-        if (level != -1) {
+        if (level >= 0) {
+            intercomBatLvl = level
             RykerConnectApplication.intercomBattery = level.toByte()
+            // Akkustand persistieren
+            viewModelScope.launch {
+                val store = RykerConnectStore(getApplication())
+                store.saveIntercomBattery(level)
+            }
         }
+        // Bei -1 den letzten gespeicherten Wert beibehalten
     }
 }

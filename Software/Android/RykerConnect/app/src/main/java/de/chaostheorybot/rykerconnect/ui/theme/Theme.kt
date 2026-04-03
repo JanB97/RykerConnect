@@ -1,9 +1,6 @@
 package de.chaostheorybot.rykerconnect.ui.theme
 
 import android.app.Activity
-import android.os.Build
-import android.view.Window
-import android.view.WindowManager
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -12,14 +9,12 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 
-private const val _DYNAMIC = true;
+private const val _DYNAMIC = true
 
 
 private val LightColors = lightColorScheme(
@@ -97,7 +92,7 @@ fun RykerConnectTheme(
   content: @Composable() () -> Unit
 ) {
 
-    val dynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && _DYNAMIC
+    val dynamicColor = _DYNAMIC
     val colors = when {
                 dynamicColor && useDarkTheme  -> dynamicDarkColorScheme(LocalContext.current)
                 dynamicColor && !useDarkTheme -> dynamicLightColorScheme(LocalContext.current)
@@ -105,33 +100,13 @@ fun RykerConnectTheme(
                                          else -> LightColors
     }
 
-
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-           // window.statusBarColor = if (useDarkTheme) dark_HeritageRedContainer.toArgb() else HeritageRed.toArgb()
-
-            //window.navigationBarColor =  ColorUtils.setAlphaComponent(colors.surface.toArgb(), 0)
-            //window.statusBarColor = Color.Transparent.toArgb()
-
-            //window.isNavigationBarContrastEnforced = false
-            //window.isStatusBarContrastEnforced = false
-            //window.navigationBarColor =  Color.argb(0,0,0,0)
-
-
-
-            window.navigationBarColor = Color.Transparent.toArgb()
-            //window.statusBarColor = colors.surface.toArgb()
-
-            val windowsInsetsController = WindowCompat.getInsetsController(window, view)
-
-            windowsInsetsController.isAppearanceLightStatusBars = !useDarkTheme
-            windowsInsetsController.isAppearanceLightNavigationBars = !useDarkTheme
-
-
-            //WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !useDarkTheme
-            //WindowCompat.getInsetsController(window,view).isAppearanceLightNavigationBars = !useDarkTheme
+            val insetsController = WindowCompat.getInsetsController(window, view)
+            insetsController.isAppearanceLightStatusBars = !useDarkTheme
+            insetsController.isAppearanceLightNavigationBars = !useDarkTheme
         }
     }
 

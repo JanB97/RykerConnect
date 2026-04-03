@@ -6,10 +6,9 @@ import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.util.Log
 import android.widget.Toast
-import androidx.compose.ui.res.stringArrayResource
+import androidx.core.content.IntentCompat
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import de.chaostheorybot.rykerconnect.logic.BLEDeviceConnection
@@ -30,12 +29,9 @@ class BluetoothConnectReceiver: BroadcastReceiver() {
         val action = intent?.action
         when(action){
             BluetoothDevice.ACTION_ACL_CONNECTED -> {
-                val device: BluetoothDevice? =
-                    if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU){
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                    }else{
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                    }
+                val device: BluetoothDevice? = intent.let {
+                    IntentCompat.getParcelableExtra(it, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                }
                 Log.d("ACL_Connected", "Device Connected: ${device?.address}")
                 //Toast.makeText(context, "Device Connected: ${device?.address} - RykerConnect", Toast.LENGTH_LONG).show()
 
@@ -54,17 +50,17 @@ class BluetoothConnectReceiver: BroadcastReceiver() {
                             store.saveInterComConnected(true)
                         }
                         if(RykerConnectApplication.activeConnection.value?.isConnected?.value != true){
-                            if(runBlocking { store.getBLEAppear() } == true){
+                            if(runBlocking { store.getBLEAppear() }){
                                 RykerConnectApplication.activeConnection.value = device.run { BLEDeviceConnection(Application(), device) }
                                 RykerConnectApplication.activeConnection.value?.connect()
-                                var intercomBatLvl = -1
+                                var intercomBatLvl: Int
                                 var i = 0
                                 do {
                                     i++
                                     runBlocking{ delay(20)}
                                     intercomBatLvl = try {
                                         BluetoothLogic.getBatteryLevel(device)
-                                    } catch(e: Exception){
+                                    } catch(_: Exception){
                                         -1
                                     }
                                 }while (intercomBatLvl == -1 && i < 40)
@@ -72,14 +68,14 @@ class BluetoothConnectReceiver: BroadcastReceiver() {
                                 RykerConnectApplication.activeConnection.value?.writeIntercomBattery(intercomBatLvl.toByte())
                             }
                         }else{
-                            var intercomBatLvl = -1
+                            var intercomBatLvl: Int
                             var i = 0
                             do {
                                 i++
                                 runBlocking{ delay(20)}
                                 intercomBatLvl = try {
                                     BluetoothLogic.getBatteryLevel(device)
-                                } catch(e: Exception){
+                                } catch(_: Exception){
                                     -1
                                 }
                             }while (intercomBatLvl == -1 && i < 40)
@@ -98,12 +94,9 @@ class BluetoothConnectReceiver: BroadcastReceiver() {
 
             }
             BluetoothDevice.ACTION_ACL_DISCONNECTED -> {
-                val device: BluetoothDevice? =
-                    if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU){
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                    }else{
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-                    }
+                val device: BluetoothDevice? = intent.let {
+                    IntentCompat.getParcelableExtra(it, BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                }
                 Log.d("ACL_Disconnected", "Device Disconnected: ${device?.address}")
                 //Toast.makeText(context, "Device Disconnected: ${device?.address} - RykerConnect", Toast.LENGTH_LONG).show()
 

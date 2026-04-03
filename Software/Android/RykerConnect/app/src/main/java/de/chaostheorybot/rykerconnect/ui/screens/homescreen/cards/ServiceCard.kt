@@ -3,6 +3,10 @@ package de.chaostheorybot.rykerconnect.ui.screens.homescreen.cards
 import android.content.Context
 import android.provider.Settings
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
@@ -14,6 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -23,9 +29,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -37,9 +47,14 @@ import de.chaostheorybot.rykerconnect.R
 fun ServiceCard(customizeClick: () -> Unit) {
     val context = LocalContext.current
     
-    // Prüfen ob der Benachrichtigungszugriff theoretisch funktioniert
     val isServiceEnabled = isNotificationServiceEnabled(context)
-    
+    var expanded by remember { mutableStateOf(false) }
+    val expandRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "service expand rotation"
+    )
+
     val serviceColor: Color by animateColorAsState(
         if (isServiceEnabled) {
             if (isSystemInDarkTheme()) Color(0xFFB4FFAB) else Color(0xFF1ABA1A)
@@ -54,17 +69,33 @@ fun ServiceCard(customizeClick: () -> Unit) {
             .fillMaxWidth()
             .wrapContentHeight()
             .padding(top = 8.dp),
-        colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp))
+        colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)),
+        onClick = { expanded = !expanded }
     )
     {
-        Column {
+        Column(
+            modifier = Modifier.animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow
+                )
+            )
+        ) {
             Row(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier
                         .padding(start = 12.dp, top = 10.dp, end = 8.dp)
                         .weight(10f)
                 ) {
-                    Text(text = "Service Status", style = MaterialTheme.typography.titleLarge)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(text = "Service Status", style = MaterialTheme.typography.titleLarge)
+                        Spacer(modifier = Modifier.padding(start = 4.dp))
+                        Icon(
+                            imageVector = Icons.Default.ExpandMore,
+                            contentDescription = if (expanded) "Collapse" else "Expand",
+                            modifier = Modifier.rotate(expandRotation)
+                        )
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
                         text = if (isServiceEnabled) "Service is active and listening for notifications." else "Service is disabled. Please grant notification access.",
@@ -86,13 +117,15 @@ fun ServiceCard(customizeClick: () -> Unit) {
                     )
                 }
             }
-            Row(
-                modifier = Modifier
-                    .align(Alignment.End)
-                    .padding(end = 12.dp, bottom = 12.dp)
-            ) {
-                Button(onClick = { customizeClick() }) {
-                    Text(text = "Manage & Customize")
+            if (expanded) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.End)
+                        .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
+                ) {
+                    Button(onClick = { customizeClick() }) {
+                        Text(text = "Manage & Customize")
+                    }
                 }
             }
         }

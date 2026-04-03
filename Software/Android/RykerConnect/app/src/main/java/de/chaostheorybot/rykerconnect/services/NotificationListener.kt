@@ -16,14 +16,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 
-data class notifyListClass(
+data class NotifyListClass(
     val app: String,
     val id: Int
 )
 
 class NotificationListener : NotificationListenerService() {
 
-    private val notifyList: MutableList<notifyListClass> = ArrayList()
+    private val notifyList: MutableList<NotifyListClass> = ArrayList()
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     @SuppressLint("MissingPermission")
@@ -34,8 +34,8 @@ class NotificationListener : NotificationListenerService() {
         val strApp = sbn?.packageName.toString()
 
         if (strApp.isNotEmpty() && intID != null) {
-            val notifyListItem = notifyListClass(app = strApp, id = intID)
-            
+            val notifyListItem = NotifyListClass(app = strApp, id = intID)
+
             // Filter für doppelte Benachrichtigungen (WhatsApp etc.)
             if (!notifyList.contains(notifyListItem) || strApp == "com.whatsapp") {
                 notifyList.add(notifyListItem)
