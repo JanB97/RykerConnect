@@ -28,7 +28,6 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
-import androidx.navigation.NavController
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import kotlinx.coroutines.Dispatchers
@@ -40,7 +39,7 @@ import org.json.JSONArray
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FirmwareUpdateScreen(nav: NavController, store: RykerConnectStore) {
+fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -106,7 +105,7 @@ fun FirmwareUpdateScreen(nav: NavController, store: RykerConnectStore) {
             TopAppBar(
                 title = { Text("Firmware Update") },
                 navigationIcon = {
-                    IconButton(onClick = { nav.popBackStack() }) {
+                    IconButton(onClick = { onBack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }

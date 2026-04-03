@@ -35,9 +35,7 @@ import androidx.navigation.compose.rememberNavController
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import de.chaostheorybot.rykerconnect.logic.BLEDeviceConnection
 import de.chaostheorybot.rykerconnect.ui.screens.homescreen.HomeScreen
-import de.chaostheorybot.rykerconnect.ui.screens.servicescreen.CustomizeServiceScreen
 import de.chaostheorybot.rykerconnect.ui.screens.setupscreen.SetupScreen
-import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.FirmwareUpdateScreen
 import de.chaostheorybot.rykerconnect.ui.theme.RykerConnectTheme
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
@@ -75,12 +73,6 @@ class MainActivity : ComponentActivity() {
                         }
                         composable(route = Screen.HomeScreen.route) {
                             HomeScreen(store = store, nav = navController, companion = { setupCompanion(store) })
-                        }
-                        composable(route = Screen.ServiceScreen.route) {
-                            CustomizeServiceScreen(nav = navController, store = store)
-                        }
-                        composable(route = Screen.SettingsScreen.route) {
-                            FirmwareUpdateScreen(nav = navController, store = store)
                         }
                     }
                 }

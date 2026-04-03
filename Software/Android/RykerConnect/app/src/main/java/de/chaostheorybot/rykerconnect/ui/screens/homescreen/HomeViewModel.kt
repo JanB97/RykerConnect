@@ -39,7 +39,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application){
         private set
     private var selectedName: String = ""
     var selectedMacTMP by mutableStateOf("")
-    lateinit var pairedInterComDevices: MutableList<BluetoothDevices>
+    var pairedInterComDevices: MutableList<BluetoothDevices> = mutableListOf()
         private set
     private val drwON = application.getDrawable(_onDrawable) as AnimationDrawable
     private val drwOff = application.getDrawable(_offDrawable) as AnimationDrawable

@@ -1,6 +1,9 @@
 package de.chaostheorybot.rykerconnect.ui.screens.homescreen.cards
 
+import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
@@ -27,8 +30,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -47,14 +52,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.chaostheorybot.rykerconnect.R
-import de.chaostheorybot.rykerconnect.ui.screens.homescreen.SelectDeviceButton
 import de.chaostheorybot.rykerconnect.ui.screens.homescreen.getBatteryIcon
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-fun IntercomCard(intercomConnected: Boolean, intercomClick: () -> Unit, intercomBattery: Int, selectDeviceClick: () -> Unit, setBatteryStatus: () -> Unit, intercomName: String) {
-
-
-
+fun IntercomCard(
+    intercomConnected: Boolean,
+    intercomClick: () -> Unit,
+    intercomBattery: Int,
+    selectDeviceClick: () -> Unit,
+    setBatteryStatus: () -> Unit,
+    intercomName: String,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -74,7 +85,6 @@ fun IntercomCard(intercomConnected: Boolean, intercomClick: () -> Unit, intercom
                 )
             )
         ) {
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -212,7 +222,20 @@ fun IntercomCard(intercomConnected: Boolean, intercomClick: () -> Unit, intercom
                 }
 
             }
-            SelectDeviceButton(txt = stringResource(id = R.string.str_sel_device), onClick = {selectDeviceClick()})
+            HorizontalDivider()
+            with(sharedTransitionScope) {
+                TextButton(
+                    onClick = { selectDeviceClick() },
+                    modifier = Modifier
+                        .padding(start = 4.dp, bottom = 1.dp)
+                        .sharedBounds(
+                            sharedContentState = rememberSharedContentState("intercom-bounds"),
+                            animatedVisibilityScope = animatedVisibilityScope
+                        )
+                ) {
+                    Text(text = stringResource(id = R.string.str_sel_device))
+                }
+            }
         }
     }
 }

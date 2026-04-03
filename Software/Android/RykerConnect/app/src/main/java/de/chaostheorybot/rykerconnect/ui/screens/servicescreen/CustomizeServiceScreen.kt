@@ -21,14 +21,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import de.chaostheorybot.rykerconnect.data.MusicService
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CustomizeServiceScreen(nav: NavController, store: RykerConnectStore) {
+fun CustomizeServiceScreen(onBack: () -> Unit, store: RykerConnectStore) {
     val selectedMusicPlayer by store.getMusicPlayerToken.collectAsState(initial = MusicService.SPOTIFY)
     val coroutineScope = rememberCoroutineScope()
     Scaffold(
@@ -36,7 +35,7 @@ fun CustomizeServiceScreen(nav: NavController, store: RykerConnectStore) {
             TopAppBar(
                 title = { Text("Customize Service") },
                 navigationIcon = {
-                    IconButton(onClick = { nav.navigateUp() }) {
+                    IconButton(onClick = { onBack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 }
@@ -45,7 +44,7 @@ fun CustomizeServiceScreen(nav: NavController, store: RykerConnectStore) {
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
             ServiceSelection(selectedMusicPlayer, onServiceSelected = { service -> coroutineScope.launch { store.saveMusicPlayer(service) } })
-            Button(onClick = { nav.navigateUp() }, modifier = Modifier.padding(16.dp)) {
+            Button(onClick = { onBack() }, modifier = Modifier.padding(16.dp)) {
                 Text(text = "Save")
             }
         }

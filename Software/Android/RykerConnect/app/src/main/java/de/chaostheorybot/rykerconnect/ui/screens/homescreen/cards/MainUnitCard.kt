@@ -4,6 +4,9 @@ import android.companion.CompanionDeviceManager
 import android.content.Context
 import android.graphics.drawable.AnimationDrawable
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -34,13 +37,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun MainUnitCard(
     mainUnitDrawable: AnimationDrawable,
     companion: () -> Unit,
     isAssociated: Boolean,
     isConnected: Boolean,
-    onNavigateToUpdate: () -> Unit
+    onNavigateToUpdate: () -> Unit,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    animatedVisibilityScope: AnimatedVisibilityScope
 ) {
 
     val context = LocalContext.current
@@ -50,7 +58,6 @@ fun MainUnitCard(
 
     var showResetDialog by remember { mutableStateOf(false) }
     var resetPin by remember { mutableStateOf("") }
-    var expanded by remember { mutableStateOf(false) }
     val expandRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
@@ -61,7 +68,7 @@ fun MainUnitCard(
         modifier = Modifier
             .fillMaxWidth()
             .wrapContentHeight(),
-        onClick = { expanded = !expanded },
+        onClick = { onExpandedChange(!expanded) },
         shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp))
     )
@@ -167,14 +174,21 @@ fun MainUnitCard(
                         Text("Reset")
                     }
 
-                    OutlinedButton(
-                        onClick = { onNavigateToUpdate() },
-                        modifier = Modifier.weight(1f),
-                        enabled = isConnected
-                    ) {
-                        Icon(Icons.Default.SystemUpdate, contentDescription = null)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Update")
+                    with(sharedTransitionScope) {
+                        OutlinedButton(
+                            onClick = { onNavigateToUpdate() },
+                            modifier = Modifier
+                                .weight(1f)
+                                .sharedBounds(
+                                    sharedContentState = rememberSharedContentState("update-bounds"),
+                                    animatedVisibilityScope = animatedVisibilityScope
+                                ),
+                            enabled = isConnected
+                        ) {
+                            Icon(Icons.Default.SystemUpdate, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Update")
+                        }
                     }
                 }
             }
