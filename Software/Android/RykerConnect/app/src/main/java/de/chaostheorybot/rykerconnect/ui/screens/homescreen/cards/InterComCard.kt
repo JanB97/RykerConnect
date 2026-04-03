@@ -58,7 +58,6 @@ import de.chaostheorybot.rykerconnect.ui.screens.homescreen.getBatteryIcon
 @Composable
 fun IntercomCard(
     intercomConnected: Boolean,
-    intercomClick: () -> Unit,
     intercomBattery: Int,
     selectDeviceClick: () -> Unit,
     setBatteryStatus: () -> Unit,
@@ -72,10 +71,6 @@ fun IntercomCard(
             .wrapContentHeight()
             .padding(top = 8.dp),
         colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surfaceColorAtElevation(3.dp)),
-        onClick = {
-            intercomClick()
-            setBatteryStatus()
-        }
     ) {
         Column(
             modifier = Modifier.animateContentSize(

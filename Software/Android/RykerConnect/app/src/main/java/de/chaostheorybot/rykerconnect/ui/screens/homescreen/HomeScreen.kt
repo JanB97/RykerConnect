@@ -147,7 +147,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
 
                     item {
                         IntercomCard(viewModel.intercomConnected,
-                            intercomClick = { viewModel.intercomClick() },
                             intercomBattery =  viewModel.intercomBatLvl,
                             selectDeviceClick = {
                                 viewModel.selBLDeviceClick()
