@@ -82,11 +82,8 @@ void mediaDataCallback(const uint8_t* data, uint8_t size)
 
     if(size > 5){
         uint8_t strLen = size - 5;
-        char str[strLen + 1];
-        memcpy(str, data + 5, strLen);
-        str[strLen] = '\0';
-        D_println(str);
-        String strValue(str);
+        String strValue((const char*)(data + 5), strLen);
+        D_println(strValue.c_str());
         int delimiter_title = strValue.indexOf(0x03);
         localTitle = strValue.substring(0, delimiter_title);
         localTitle.trim();
@@ -192,9 +189,21 @@ void handleSettingsCallback(const uint8_t* data, uint8_t size){
 void handleFirmwareUpdateCallback(String value){
     D_println(" FIRMWARE UUID");
     int delimiter = value.indexOf(0x03);
+    String ssid = value.substring(0, delimiter);
+    String rest = value.substring(delimiter + 1);
+    int delimiter2 = rest.indexOf(0x03);
+    String password;
+    if(delimiter2 >= 0){
+        password = rest.substring(0, delimiter2);
+        firmwareDownloadUrl = rest.substring(delimiter2 + 1);
+        D_printf(" Begin WiFi | SSID: %s - PW: %s - URL: %s\n", ssid.c_str(), password.c_str(), firmwareDownloadUrl.c_str());
+    } else {
+        password = rest;
+        firmwareDownloadUrl = "";
+        D_printf(" Begin WiFi | SSID: %s - PW: %s (no URL, browser fallback)\n", ssid.c_str(), password.c_str());
+    }
     firmwareUpdateEnabled = true;
-    D_printf(" Begin WiFi | SSID: %s - PW: %s", value.substring(0,delimiter).c_str(), value.substring(delimiter+1, value.length()).c_str());
-    WiFi.begin(value.substring(0,delimiter).c_str(), value.substring(delimiter+1, value.length()).c_str());    
+    WiFi.begin(ssid.c_str(), password.c_str());
 }
 
 void handleFirmwareResetCallback(uint16_t value){

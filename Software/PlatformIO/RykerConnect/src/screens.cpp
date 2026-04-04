@@ -119,4 +119,5 @@ void drawPopups(){
   }
   drawOTAPopup();
   drawResetPopup();
+  drawPairingPopup();
 }

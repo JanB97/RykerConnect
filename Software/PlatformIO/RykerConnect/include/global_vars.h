@@ -8,10 +8,11 @@
 #include <mcp9808.h>
 #include <freertos/semphr.h>
 
-#define DEBUG
+//#define DEBUG
 #define SPLASHSCREEN
 
-#define VERSION 0x0001
+#define VERSION 0x0003
+
 #define OLED_WIDTH 320
 #define OLED_HEIGHT 132
 
@@ -81,6 +82,9 @@ extern uint8_t network_signal;
 extern String network_type;
 extern bool blConnected;
 extern uint8_t screenToDisplay;
+extern bool pairingActive;
+extern uint32_t pairingPin;
+extern unsigned long pairingConnectTime;
 
 extern SemaphoreHandle_t dataMutex;
 
@@ -88,7 +92,10 @@ extern SemaphoreHandle_t dataMutex;
 
 #define WIFI_HOSTNAME "RykerConnect"
 extern bool firmwareUpdateEnabled;
+extern bool firmwareDownloadAttempted;
+extern int8_t otaDownloadPercent;
 extern String wifiIPAddress;
+extern String firmwareDownloadUrl;
 
 #pragma endregion
 
@@ -144,6 +151,7 @@ extern struct EEPROM_Struct{
     int8_t      battery_icon_first;
     uint32_t    battery_icon_interval;
     uint32_t    notification_interval;
+    float       temp_calibration; // degrees to subtract from sensor reading
     uint32_t    crc;
 }__attribute__((packed)) sEEPROM;
 
@@ -164,7 +172,7 @@ extern struct EEPROM_Struct{
     #define D_println(...)  Serial.println(__VA_ARGS__);
     #define D_printlnV(x)  D_printV(x); Serial.println ();
     #define D_delay(x) delay(x);
-    extern unsigned long start, end;
+    extern unsigned long dbg_start, dbg_end;
     #else
     #define D_begin(...)
     #define D_print(...)

@@ -249,6 +249,31 @@ void drawOTAPopup(){
             drawStr(OLED_WIDTH/2-(u8g2_current->getStrWidth("OTA Update"))/2+9, OLED_HEIGHT-44-4+18, "OTA Update");
             u8g2_current->setFont(u8g2_font_profont15_tf);
             drawStr(OLED_WIDTH/2-(u8g2_current->getStrWidth("Connecting WiFi\x85"))/2, OLED_HEIGHT-12, "Connecting WiFi\x85");
+        }else if(otaDownloadPercent >= 0){
+            // Downloading with progress bar
+            u8g2_current->setDrawColor(0);
+            drawRBox(OLED_WIDTH/2-180/2,OLED_HEIGHT-62-4,183,66,24);
+            u8g2_current->setDrawColor(1);
+            drawRFrame(OLED_WIDTH/2-180/2,OLED_HEIGHT-62-4,180,62,22);
+            drawXBMP(OLED_WIDTH/2-180/2+14,OLED_HEIGHT-62-4+5, ota_size, ota_size, ota_16_bits);
+            u8g2_current->setFont(u8g2_font_profont17_tf);
+            drawStr(OLED_WIDTH/2-(u8g2_current->getStrWidth("OTA Update"))/2+9, OLED_HEIGHT-62-4+18, "OTA Update");
+            // Percentage text
+            u8g2_current->setFont(u8g2_font_profont15_tf);
+            char pctStr[8];
+            snprintf(pctStr, sizeof(pctStr), "%d %%", otaDownloadPercent);
+            drawStr(OLED_WIDTH/2-(u8g2_current->getStrWidth(pctStr))/2, OLED_HEIGHT-62-4+34, pctStr);
+            // Progress bar background
+            int barX = OLED_WIDTH/2-140/2;
+            int barY = OLED_HEIGHT-62-4+42;
+            int barW = 140;
+            int barH = 10;
+            drawRFrame(barX, barY, barW, barH, 4);
+            // Progress bar fill
+            int fillW = (barW - 4) * otaDownloadPercent / 100;
+            if(fillW > 0){
+                drawRBox(barX+2, barY+2, fillW, barH-4, 2);
+            }
         }else{
             u8g2_current->setDrawColor(0);
             drawRBox(OLED_WIDTH/2-224/2,OLED_HEIGHT-60-4,227,64,32);
@@ -278,6 +303,21 @@ void drawResetPopup(){
         u8g2_current->setFont(u8g2_font_profont15_tf);
         drawStr(OLED_WIDTH/2-(u8g2_current->getStrWidth(("Pin: " + String(resetPin)).c_str()))/2, OLED_HEIGHT-12, ("Pin: " + String(resetPin)).c_str());
     }    
+}
+
+void drawPairingPopup(){
+    if(pairingActive && (millis() - pairingConnectTime >= 500)){
+        u8g2_current->setDrawColor(0);
+        drawRBox(OLED_WIDTH/2-150/2,OLED_HEIGHT-45-4,153,48,24);
+        u8g2_current->setDrawColor(1);
+        drawRFrame(OLED_WIDTH/2-150/2,OLED_HEIGHT-44-4,150,44,22);
+        u8g2_current->setFont(u8g2_font_profont17_tf);
+        drawStr(OLED_WIDTH/2-(u8g2_current->getStrWidth("BLE Pairing"))/2, OLED_HEIGHT-44-4+18, "BLE Pairing");
+        u8g2_current->setFont(u8g2_font_profont22_tf);
+        String pinStr = String(pairingPin);
+        while(pinStr.length() < 6) pinStr = "0" + pinStr;
+        drawStr(OLED_WIDTH/2-(u8g2_current->getStrWidth(pinStr.c_str()))/2, OLED_HEIGHT-10, pinStr.c_str());
+    }
 }
 
 

@@ -4,13 +4,13 @@
 
 class ServerCallbacks : public NimBLEServerCallbacks
 {
-    void onConnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
+    void onConnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo) override
     {
 
         D_println("");
         D_println(" *********** onConnect      ************");
         D_println("");
-        D_printf(" Client connected:: %s\n", NimBLEAddress(desc->peer_ota_addr).toString().c_str());
+        D_printf(" Client connected:: %s\n", connInfo.getAddress().toString().c_str());
         D_printf(" onConnect Core: %i", xPortGetCoreID());
         D_println("");
         D_println(" ***************************************");
@@ -18,29 +18,58 @@ class ServerCallbacks : public NimBLEServerCallbacks
 
         blConnected = true;
         screenToDisplay = sEEPROM.screen;
-        //NimBLEDevice::startAdvertising(); //Multiconnect
+
+        // Show pairing PIN if device is not bonded (500ms delay in draw
+        // prevents briefly flashing the PIN when a bonded device reconnects)
+        if(!NimBLEDevice::isBonded(connInfo.getAddress())){
+            pairingPin = NimBLEDevice::getSecurityPasskey();
+            pairingActive = true;
+            pairingConnectTime = millis();
+            D_printf(" Not bonded - showing pairing PIN: %u", pairingPin);
+        }
+
+        // Request fast connection parameters for low latency (7.5ms - 15ms interval)
+        pServer->updateConnParams(connInfo.getConnHandle(), 6, 12, 0, 100);
     };
 
-    void onDisconnect(NimBLEServer *pServer, ble_gap_conn_desc *desc)
+    void onDisconnect(NimBLEServer *pServer, NimBLEConnInfo &connInfo, int reason) override
     {
 
         D_println("");
         D_println(" *********** onDisconnect   ************");
         D_println("");
-        D_printf(" Client disconnected:: %s\n", NimBLEAddress(desc->peer_ota_addr).toString().c_str());
+        D_printf(" Client disconnected:: %s\n", connInfo.getAddress().toString().c_str());
         D_printf(" onDisconnect Core: %i", xPortGetCoreID());
         D_println("");
         D_println(" ***************************************");
         D_println("");
 
         blConnected = false;
+        pairingActive = false;
         NimBLEDevice::startAdvertising();
+    };
+
+    uint32_t onPassKeyDisplay() override {
+        D_printf(" Pairing PIN: %u", NimBLEDevice::getSecurityPasskey());
+        pairingPin = NimBLEDevice::getSecurityPasskey();
+        pairingActive = true;
+        return pairingPin;
+    };
+
+    void onAuthenticationComplete(NimBLEConnInfo &connInfo) override {
+        D_println(" Authentication complete");
+        pairingActive = false;
+        if(!connInfo.isEncrypted()){
+            D_println(" Encryption failed - deleting bond and disconnecting");
+            NimBLEDevice::deleteBond(connInfo.getAddress());
+            NimBLEDevice::getServer()->disconnect(connInfo.getConnHandle());
+        }
     };
 };
 
 class BLECharCallbacks : public NimBLECharacteristicCallbacks
 {
-    void onWrite(NimBLECharacteristic *pCharacteristic)
+    void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
     {
 
         String char_uuid = pCharacteristic->getUUID().toString().c_str();
@@ -55,7 +84,7 @@ class BLECharCallbacks : public NimBLECharacteristicCallbacks
 
         if (char_uuid == TIME_UUID)
         { // ZEIT
-            timeCallback(pCharacteristic->getValue().data(), pCharacteristic->getDataLength());
+            timeCallback(pCharacteristic->getValue().data(), pCharacteristic->getLength());
         }
         else if (char_uuid == NETWORK_UUID)
         { // NETZWERK
@@ -71,7 +100,7 @@ class BLECharCallbacks : public NimBLECharacteristicCallbacks
         }
         else if (char_uuid == MEDIA_DATA_UUID)
         {
-            mediaDataCallback(pCharacteristic->getValue().data(), pCharacteristic->getDataLength());
+            mediaDataCallback(pCharacteristic->getValue().data(), pCharacteristic->getLength());
         }
         else if (char_uuid == NOTIFICATION_UUID)
         {
@@ -88,7 +117,7 @@ class BLECharCallbacks : public NimBLECharacteristicCallbacks
         }
         else if (char_uuid == SETTINGS_UUID){
             D_println(" Settings UUID");
-            handleSettingsCallback(pCharacteristic->getValue().data(), pCharacteristic->getDataLength());            
+            handleSettingsCallback(pCharacteristic->getValue().data(), pCharacteristic->getLength());            
         }
         else if (char_uuid == FIRMWARE_UPDATE_UUID){
             
@@ -112,7 +141,7 @@ class BLECharCallbacks : public NimBLECharacteristicCallbacks
         D_println(" *************************************");
         D_println("");
     }
-    void onRead(NimBLECharacteristic *pCharacteristic)
+    void onRead(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
     {
         String char_uuid = pCharacteristic->getUUID().toString().c_str();
         if (char_uuid == TIME_UUID)
@@ -134,24 +163,20 @@ void setupBLEServer()
     D_printf("Start Task Core: %i", xPortGetCoreID());
     D_printf("Start Task: %i Micros", micros());
 #ifdef DEBUG
-    start = micros();
+    dbg_start = micros();
 #endif
 
     NimBLEDevice::init("RykerConnect-MainUnit");
 
-    NimBLEDevice::setSecurityAuth(true, true, true);
-    NimBLEDevice::setSecurityPasskey(123456);
-    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_YESNO);
+    NimBLEDevice::setSecurityAuth(true, true, false);
+    uint32_t blePin = 100000 + (esp_random() % 900000);
+    NimBLEDevice::setSecurityPasskey(blePin);
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     NimBLEServer *pServer = NimBLEDevice::createServer();
     pServer->setCallbacks(new ServerCallbacks());
 
-    /** Optional: set the transmit power, default is 3db */
-    // Other Options ESP_PWR_LVL_N9 (+9), ESP_PWR_LVL_P6 (+6), ESP_PWR_LVL_P3 (+3), ESP_PWR_LVL_N0, ESP_PWR_LVL_N3 (-3), ESP_PWR_LVL_N6 (-6), ESP_PWR_LVL_N9 (-9), ESP_PWR_LVL_N12 (-12)
-    #ifdef ESP_PLATFORM
-        NimBLEDevice::setPower(ESP_PWR_LVL_P9); /** -12db */
-    #else
-            NimBLEDevice::setPower(-12); /** -12db */
-    #endif
+    /** Optional: set the transmit power in dBm */
+    NimBLEDevice::setPower(9); /** +9db */
 
     // region HID Setup
     /* HID */
@@ -161,13 +186,13 @@ void setupBLEServer()
 
     // output->setCallbacks(new MyCharCallbacks());
 
-    hid->manufacturer()->setValue((std::string) "Jan Boerschlein");
+    hid->setManufacturer("Jan Boerschlein");
 
     //hid->pnp(0x02, 0xe502, 0xa111, 0x0210);
-    hid->pnp(0x00, 0x00, 0x0100, (VERSION << 8) | ((VERSION >> 8) & 0xFF));
-    hid->hidInfo(0x00, 0x02);
+    hid->setPnp(0x00, 0x00, 0x0100, (VERSION << 8) | ((VERSION >> 8) & 0xFF));
+    hid->setHidInfo(0x00, 0x02);
 
-    const uint8_t report[] = {
+    static const uint8_t report[] = {
         USAGE_PAGE(1), 0x01, // Generic Desktop Ctrls
         USAGE(1), 0x02,      // Keyboard
         COLLECTION(1), 0x01, // Application
@@ -200,7 +225,7 @@ void setupBLEServer()
         REPORT_SIZE(1), 0x03,
         HIDOUTPUT(1), 0x01, //   Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile
         END_COLLECTION(0)};
-    hid->reportMap((uint8_t *)report, sizeof(report));
+    hid->setReportMap((uint8_t *)report, sizeof(report));
 
     /**/
     // endregion
@@ -211,7 +236,7 @@ void setupBLEServer()
     NimBLECharacteristic *networkCharacteristic = pService->createCharacteristic(NETWORK_UUID, NIMBLE_PROPERTY::WRITE);
     NimBLECharacteristic *phoneBatteryCharacteristic = pService->createCharacteristic(PHONE_BATTERY_UUID, NIMBLE_PROPERTY::WRITE);
     NimBLECharacteristic *intercomBatteryCharacteristic = pService->createCharacteristic(INTERCOM_BATTERY_UUID, NIMBLE_PROPERTY::WRITE);
-    NimBLECharacteristic *mediaDataCharacteristic = pService->createCharacteristic(MEDIA_DATA_UUID, NIMBLE_PROPERTY::WRITE);
+    NimBLECharacteristic *mediaDataCharacteristic = pService->createCharacteristic(MEDIA_DATA_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
     NimBLECharacteristic *notificationCharacteristic = pService->createCharacteristic(NOTIFICATION_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN);
 
     NimBLECharacteristic *brightnessCharacteristic = pService->createCharacteristic(DISPLAY_BRIGHTNESS_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE);
@@ -237,23 +262,19 @@ void setupBLEServer()
     brightnessCharacteristic->setValue(sEEPROM.display_brightness);
     timeCharacteristic->setValue("");
 
-    pService->start();
-    hid->startServices();
+    pServer->start();
 
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
     pAdvertising->setAppearance(0x0180);
     // pAdvertising->addServiceUUID((uint16_t)0x1849);
     pAdvertising->addServiceUUID(SERVICE_UUID);
-    pAdvertising->setScanResponse(true);
-    pAdvertising->setMinPreferred(0x06); // functions that help with iPhone connections issue
-    pAdvertising->setMaxPreferred(0x12);
-    // NimBLEUUID u = hid->hidService()->getUUID();
+    pAdvertising->enableScanResponse(true);
     pAdvertising->start();
     // hid->setBatteryLevel(100);
 
 #ifdef DEBUG
-    end = micros();
+    dbg_end = micros();
 #endif
-    D_printf("End Task: %i Micros", end);
+    D_printf("End Task: %i Micros", dbg_end);
     D_printf("End Task Core: %i", xPortGetCoreID());
 }

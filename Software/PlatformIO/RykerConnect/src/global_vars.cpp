@@ -38,15 +38,21 @@ uint8_t network_signal = 0;
 String network_type = "";
 bool blConnected = false;
 uint8_t screenToDisplay = 0;
+bool pairingActive = false;
+uint32_t pairingPin = 0;
+unsigned long pairingConnectTime = 0;
 
 SemaphoreHandle_t dataMutex = NULL;
 
 #pragma region Firmware Update
 
 bool firmwareUpdateEnabled = 0;
+bool firmwareDownloadAttempted = false;
+int8_t otaDownloadPercent = -1;
 String wifiSSID = "";
 String wifiPassword = "";
 String wifiIPAddress = "";
+String firmwareDownloadUrl = "";
 
 #pragma endregion
 
@@ -95,5 +101,5 @@ struct EEPROM_Struct sEEPROM;
 
 
 #ifdef DEBUG
-    unsigned long start = 0, end = 0;
+    unsigned long dbg_start = 0, dbg_end = 0;
 #endif

@@ -73,10 +73,10 @@ void runTimers(){
       if(ts.isConnected()){
         //MCP_shutdown_wake(false);
         //delay(65);
-        global_temp = ts.getTemperature();
+        global_temp = ts.getTemperature() - sEEPROM.temp_calibration;
         //MCP_shutdown_wake(true);
       }else{
-        global_temp = RTC.getTemperature();
+        global_temp = RTC.getTemperature() - sEEPROM.temp_calibration;
       }     
   }
 }
@@ -114,6 +114,7 @@ void reset_settings(){
     sEEPROM.battery_icon_first = BATTERY_ICON_FIRST;
     sEEPROM.battery_icon_interval = BATTERY_ICON_INTERVAL;
     sEEPROM.notification_interval = NOTIFICATION_INTERVAL;
+    sEEPROM.temp_calibration = 0.0; // default: no offset
     sEEPROM.crc = calc_crc();
 
     D_printf("Settings reset... \n New CRC: %i, Saving Settings to EEPROM", sEEPROM.crc);
@@ -134,7 +135,7 @@ bool valiade_eeprom(){
 
 uint32_t calc_crc(){
   //uint8_t numBuff = sizeof(EEPROM_Struct)-sizeof(sEEPROM.crc)-3;
-  uint8_t numBuff = sizeof(EEPROM_Struct)-sizeof(sEEPROM.crc);
+  static constexpr uint8_t numBuff = sizeof(EEPROM_Struct)-sizeof(uint32_t);
   uint8_t crcBuffer[numBuff];
   memcpy(crcBuffer, &sEEPROM,numBuff);
   uint32_t crc = CRC32::calculate(crcBuffer, sizeof(crcBuffer));
