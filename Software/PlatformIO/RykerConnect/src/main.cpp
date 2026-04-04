@@ -125,13 +125,15 @@ void setup() {
   // leave one CS line stuck LOW and prevent that display from initialising.
   pinMode(14, OUTPUT); digitalWrite(14, HIGH);
   pinMode(10, OUTPUT); digitalWrite(10, HIGH);
-  delay(10);
+  delay(50);
 
   u8g2_0.setBusClock(60000000);
   u8g2_1.setBusClock(60000000);
   u8g2_0.begin();
   u8g2_1.begin();
   delay(50);
+  u8g2_0.begin();
+  u8g2_1.begin();
   u8g2_0.setContrast(128);
   u8g2_1.setContrast(128);
   u8g2_0.enableUTF8Print();
