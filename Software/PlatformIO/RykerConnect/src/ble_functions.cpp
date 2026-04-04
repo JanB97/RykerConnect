@@ -1,6 +1,7 @@
 #include "ble_functions.h"
 #include "global_vars.h"
 #include "functions.h"
+#include "func_u8g2.h"
 #include <WiFi.h>
 
 
@@ -14,7 +15,6 @@ void timeCallback(const uint8_t* data, uint8_t size)
         RTC.setHour((uint8_t)data[0]);
         RTC.setMinute((uint8_t)data[1]);
     }
-    
 }
 
 void networkCallback(uint16_t bytes)
@@ -141,6 +141,13 @@ void setDisplayBrightnessCallback(uint8_t brightness)
     u8g2_1.setContrast(brightness);
 }
 
+void reinitDisplayCallback()
+{
+    D_println(" Display Reinit Characteristic!");
+    initDisplays(sEEPROM.display_brightness);
+    D_println(" Display reinitialized");
+}
+
 void handleSettingsCallback(const uint8_t* data, uint8_t size){
     D_println(" Settings Characteristic!");
     if(size == sizeof(EEPROM_Struct)-sizeof(uint32_t)){
@@ -150,6 +157,7 @@ void handleSettingsCallback(const uint8_t* data, uint8_t size){
                 for(int i = 0; i<size; i++){
                     Serial.printf("Byte[%i]: %i | ", i, data[i]);
                 }
+                D_flush();
                 D_println();
             #endif
             D_printf(" Bool Adaptive Brightness: %i", data[0]);
@@ -160,9 +168,11 @@ void handleSettingsCallback(const uint8_t* data, uint8_t size){
             D_printf(" BOOL ICON2: %i", data[5]);
             D_printf(" BOOL ICON3: %i", data[6]);
             D_printf(" BOOL ICON4: %i", data[7]);
+            D_flush();
             D_printf(" UINT8_t First Battery Icon: %i", data[8]);
             D_printf(" UINT32 Battery INTERVAL: %i", (data[12] << 24) | (data[11] << 16) | (data[10] << 8) | data[9]);
             D_printf(" UINT32 Notification INTERVAL: %i", (data[16] << 24) | (data[15] << 16) | (data[14] << 8) | data[13]);
+            D_flush();
             #pragma endregion
 
             sEEPROM.adaptive_brightness = (bool)data[0];
@@ -208,7 +218,10 @@ void handleFirmwareUpdateCallback(String value){
 
 void handleFirmwareResetCallback(uint16_t value){
      D_printf(" RESET UUID - Pin get: %i | Pin needed: %i", value, resetPin);
-    if(value == resetPin){
+    if(value == 0){
+        D_println(" Reset cancelled");
+        previousResetMillis = 0;
+    }else if(value == resetPin){
          D_println(" Pin correct, reset");
         reset_settings();
         ESP.restart();

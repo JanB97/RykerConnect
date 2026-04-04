@@ -1,5 +1,26 @@
 #include "func_u8g2.h"
 
+void initDisplays(uint8_t brightness) {
+  pinMode(14, OUTPUT); digitalWrite(14, HIGH);
+  pinMode(10, OUTPUT); digitalWrite(10, HIGH);
+  delay(50);
+  // First init with slow SPI clock for reliable startup
+  u8g2_0.setBusClock(8000000);
+  u8g2_1.setBusClock(8000000);
+  u8g2_0.begin();
+  u8g2_1.begin();
+  delay(50);
+  // Second init with fast SPI clock for normal operation
+  u8g2_0.setBusClock(60000000);
+  u8g2_1.setBusClock(60000000);
+  u8g2_0.begin();
+  u8g2_1.begin();
+  u8g2_0.setContrast(brightness);
+  u8g2_1.setContrast(brightness);
+  u8g2_0.enableUTF8Print();
+  u8g2_1.enableUTF8Print();
+}
+
 void setLeftSide() {
   u8g2_current = &u8g2_0;
   offset = 0;

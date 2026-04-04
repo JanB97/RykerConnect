@@ -306,7 +306,7 @@ void drawResetPopup(){
 }
 
 void drawPairingPopup(){
-    if(pairingActive && (millis() - pairingConnectTime >= 500)){
+    if(pairingActive && (millis() - pairingConnectTime >= 1000)){
         u8g2_current->setDrawColor(0);
         drawRBox(OLED_WIDTH/2-150/2,OLED_HEIGHT-45-4,153,48,24);
         u8g2_current->setDrawColor(1);

@@ -19,7 +19,7 @@ class ServerCallbacks : public NimBLEServerCallbacks
         blConnected = true;
         screenToDisplay = sEEPROM.screen;
 
-        // Show pairing PIN if device is not bonded (500ms delay in draw
+        // Show pairing PIN if device is not bonded (1000ms delay in draw
         // prevents briefly flashing the PIN when a bonded device reconnects)
         if(!NimBLEDevice::isBonded(connInfo.getAddress())){
             pairingPin = NimBLEDevice::getSecurityPasskey();
@@ -126,6 +126,9 @@ class BLECharCallbacks : public NimBLECharacteristicCallbacks
         else if (char_uuid == FIRMWARE_RESET_UUID){
             handleFirmwareResetCallback(pCharacteristic->getValue<uint16_t>());
         }
+        else if (char_uuid == DISPLAY_REINIT_UUID){
+            reinitDisplayCallback();
+        }
         else
         {
             D_printf("UUID %s not matching or not implemented!", char_uuid);
@@ -147,13 +150,20 @@ class BLECharCallbacks : public NimBLECharacteristicCallbacks
         if (char_uuid == TIME_UUID)
         {
             D_printf(" Read TIME: %s", pCharacteristic->getValue().c_str());
-           // String clock = (String)hour + ":" + (String)minute;
             pCharacteristic->setValue("Set Time Char");
-            //D_printf(" Clock: %s", clock.c_str());
             D_printf(" Read TIME: %s \n", pCharacteristic->getValue().c_str());
         }else if(char_uuid == SETTINGS_UUID){
             D_println(" Read Settings");
             pCharacteristic->setValue(sEEPROM);
+        }else if(char_uuid == DISPLAY_BRIGHTNESS_UUID){
+            D_println(" Read Brightness");
+            pCharacteristic->setValue(sEEPROM.display_brightness);
+        }else if(char_uuid == SCREEN_UUID){
+            D_println(" Read Screen");
+            pCharacteristic->setValue(sEEPROM.screen);
+        }else if(char_uuid == FIRMWARE_VERSION_UUID){
+            D_println(" Read Firmware Version");
+            pCharacteristic->setValue((uint16_t)VERSION);
         }
     }
 };
@@ -244,6 +254,8 @@ void setupBLEServer()
     NimBLECharacteristic *settingsCharacteristic = pService->createCharacteristic(SETTINGS_UUID, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::READ_ENC | NIMBLE_PROPERTY::READ_AUTHEN | NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN);
     NimBLECharacteristic *firmwareUpdateCharacteristic = pService->createCharacteristic(FIRMWARE_UPDATE_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_ENC | NIMBLE_PROPERTY::WRITE_AUTHEN);
     NimBLECharacteristic *firmwareResetCharacteristic = pService->createCharacteristic(FIRMWARE_RESET_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN);
+    NimBLECharacteristic *displayReinitCharacteristic = pService->createCharacteristic(DISPLAY_REINIT_UUID, NIMBLE_PROPERTY::WRITE);
+    NimBLECharacteristic *firmwareVersionCharacteristic = pService->createCharacteristic(FIRMWARE_VERSION_UUID, NIMBLE_PROPERTY::READ);
 
     BLECharCallbacks *charCallbacks = new BLECharCallbacks();
     timeCharacteristic->setCallbacks(charCallbacks);
@@ -258,9 +270,12 @@ void setupBLEServer()
     settingsCharacteristic->setCallbacks(charCallbacks);
     firmwareUpdateCharacteristic->setCallbacks(charCallbacks);
     firmwareResetCharacteristic->setCallbacks(charCallbacks);
+    displayReinitCharacteristic->setCallbacks(charCallbacks);
+    firmwareVersionCharacteristic->setCallbacks(charCallbacks);
 
     brightnessCharacteristic->setValue(sEEPROM.display_brightness);
     timeCharacteristic->setValue("");
+    firmwareVersionCharacteristic->setValue((uint16_t)VERSION);
 
     pServer->start();
 

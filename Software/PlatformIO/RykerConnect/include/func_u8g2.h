@@ -1,6 +1,7 @@
 #pragma once
 #include "main.h"
 
+void initDisplays(uint8_t brightness = 128);
 void setLeftSide();
 void setRightSide();
 void drawStr(u8g2_uint_t x, u8g2_uint_t y, const char *s);

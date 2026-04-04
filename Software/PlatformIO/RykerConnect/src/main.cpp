@@ -21,7 +21,19 @@ void setupWebServer();
 
 bool downloadAndFlashFirmware(const String& url) {
     D_printf("[OTA] Starting download from: %s", url.c_str());
-    
+
+    // Ensure both displays show the OTA popup (with IP address) before starting
+    setLeftSide();
+    u8g2_current->clearBuffer();
+    drawFullClock();
+    drawOTAPopup();
+    u8g2_current->sendBuffer();
+    setRightSide();
+    u8g2_current->clearBuffer();
+    drawFullTemperature();
+    drawOTAPopup();
+    u8g2_current->sendBuffer();
+
     WiFiClientSecure secureClient;
     secureClient.setInsecure();
     D_println("[OTA] WiFiClientSecure created, setInsecure() done");
@@ -58,11 +70,24 @@ bool downloadAndFlashFirmware(const String& url) {
     D_println("[OTA] Update.begin() OK, starting download...");
     otaDownloadPercent = 0;
     
+    // Draw 0% progress immediately so the user sees the bar before data starts flowing
+    setLeftSide();
+    u8g2_current->clearBuffer();
+    drawFullClock();
+    drawOTAPopup();
+    u8g2_current->sendBuffer();
+    setRightSide();
+    u8g2_current->clearBuffer();
+    drawFullTemperature();
+    drawOTAPopup();
+    u8g2_current->sendBuffer();
+
     WiFiClient* stream = http.getStreamPtr();
     uint8_t buf[1024];
     int written = 0;
     unsigned long lastProgressLog = 0;
-    unsigned long lastDisplayUpdate = 0;
+    unsigned long lastDisplayUpdate = millis();
+    int8_t lastDisplayedPercent = 0;
     while (http.connected() && (contentLength == UPDATE_SIZE_UNKNOWN || written < contentLength)) {
         size_t available = stream->available();
         if (available) {
@@ -82,8 +107,8 @@ bool downloadAndFlashFirmware(const String& url) {
                 D_printf("[OTA] Progress: %d bytes written", written);
                 lastProgressLog = millis();
             }
-            // Refresh display every 500ms
-            if (millis() - lastDisplayUpdate > 500) {
+            // Refresh display every 500ms or every 5% change
+            if (millis() - lastDisplayUpdate > 500 || otaDownloadPercent - lastDisplayedPercent >= 5) {
                 setLeftSide();
                 u8g2_current->clearBuffer();
                 drawFullClock();
@@ -95,6 +120,7 @@ bool downloadAndFlashFirmware(const String& url) {
                 drawOTAPopup();
                 u8g2_current->sendBuffer();
                 lastDisplayUpdate = millis();
+                lastDisplayedPercent = otaDownloadPercent;
             }
         }
         delay(1);
@@ -120,24 +146,7 @@ void setup() {
   // put your setup code here, to run once:
   D_begin(115200);
 
-  // Ensure both CS pins start HIGH (deasserted) before SPI init.
-  // After a soft-reset (ESP.restart) GPIO state is preserved, which can
-  // leave one CS line stuck LOW and prevent that display from initialising.
-  pinMode(14, OUTPUT); digitalWrite(14, HIGH);
-  pinMode(10, OUTPUT); digitalWrite(10, HIGH);
-  delay(50);
-
-  u8g2_0.setBusClock(60000000);
-  u8g2_1.setBusClock(60000000);
-  u8g2_0.begin();
-  u8g2_1.begin();
-  delay(50);
-  u8g2_0.begin();
-  u8g2_1.begin();
-  u8g2_0.setContrast(128);
-  u8g2_1.setContrast(128);
-  u8g2_0.enableUTF8Print();
-  u8g2_1.enableUTF8Print();
+  initDisplays();
 
 
   #ifdef SPLASHSCREEN

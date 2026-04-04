@@ -11,7 +11,7 @@
 //#define DEBUG
 #define SPLASHSCREEN
 
-#define VERSION 0x0003
+#define VERSION 0x0004
 
 #define OLED_WIDTH 320
 #define OLED_HEIGHT 132
@@ -47,6 +47,8 @@
 #define SETTINGS_UUID "05f7c3e4-daac-4953-8c71-20eacdf0c7a1"
 #define FIRMWARE_UPDATE_UUID "1d1306c5-98d9-4998-8dfd-35136295575f"
 #define FIRMWARE_RESET_UUID "18cb54fe-45e8-4819-a262-24b731c8b236"
+#define DISPLAY_REINIT_UUID "3a6e4b2c-8f71-4d09-b5a3-c7e2f1d08a94"
+#define FIRMWARE_VERSION_UUID "fb2385da-5290-4513-bb0c-6d0b21de619a"
 
 #pragma endregion  
 
@@ -166,6 +168,7 @@ extern struct EEPROM_Struct{
 #pragma region DEBUG CODE
     #ifdef DEBUG
     #define D_begin(...) Serial.begin(__VA_ARGS__);
+    #define D_flush() Serial.flush();
     #define D_print(...)    Serial.print(__VA_ARGS__);
     #define D_printf(format, ...)   Serial.printf(format"\n", __VA_ARGS__);
     #define D_printV(x)  Serial.print(F(#x" = ")); Serial.print (x);Serial.print (F(" ")); 
@@ -175,6 +178,7 @@ extern struct EEPROM_Struct{
     extern unsigned long dbg_start, dbg_end;
     #else
     #define D_begin(...)
+    #define D_flush()
     #define D_print(...)
     #define D_printf(...)
     #define D_printV(x) 
