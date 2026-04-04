@@ -46,10 +46,30 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
     val autoDownload = store.getFwAutoDownload.collectAsState(initial = true)
     val fwVersion = store.getFwVersion.collectAsState(initial = "V0001")
     val useHotspot = store.getFwUseHotspot.collectAsState(initial = false)
-    val wlanSsid = store.getFwWlanSsid.collectAsState(initial = "")
-    val wlanPwd = store.getFwWlanPwd.collectAsState(initial = "")
-    val hotspotSsid = store.getFwHotspotSsid.collectAsState(initial = "")
-    val hotspotPwd = store.getFwHotspotPwd.collectAsState(initial = "")
+
+    // Load stored credentials once, then use local state for editing
+    val storedWlanSsid by store.getFwWlanSsid.collectAsState(initial = "")
+    val storedWlanPwd by store.getFwWlanPwd.collectAsState(initial = "")
+    val storedHotspotSsid by store.getFwHotspotSsid.collectAsState(initial = "")
+    val storedHotspotPwd by store.getFwHotspotPwd.collectAsState(initial = "")
+
+    // Local mutable state for text fields – initialized from DataStore once
+    var localWlanSsid by remember { mutableStateOf<String?>(null) }
+    var localWlanPwd by remember { mutableStateOf<String?>(null) }
+    var localHotspotSsid by remember { mutableStateOf<String?>(null) }
+    var localHotspotPwd by remember { mutableStateOf<String?>(null) }
+
+    // Seed local state from DataStore (only when null, i.e. first composition)
+    LaunchedEffect(storedWlanSsid) { if (localWlanSsid == null) localWlanSsid = storedWlanSsid }
+    LaunchedEffect(storedWlanPwd) { if (localWlanPwd == null) localWlanPwd = storedWlanPwd }
+    LaunchedEffect(storedHotspotSsid) { if (localHotspotSsid == null) localHotspotSsid = storedHotspotSsid }
+    LaunchedEffect(storedHotspotPwd) { if (localHotspotPwd == null) localHotspotPwd = storedHotspotPwd }
+
+    // Persist local edits to DataStore whenever they change (debounced via LaunchedEffect)
+    LaunchedEffect(localWlanSsid) { localWlanSsid?.let { store.saveFwWlanSsid(it) } }
+    LaunchedEffect(localWlanPwd) { localWlanPwd?.let { store.saveFwWlanPwd(it) } }
+    LaunchedEffect(localHotspotSsid) { localHotspotSsid?.let { store.saveFwHotspotSsid(it) } }
+    LaunchedEffect(localHotspotPwd) { localHotspotPwd?.let { store.saveFwHotspotPwd(it) } }
 
     var wlanPasswordVisible by remember { mutableStateOf(false) }
     var hotspotPasswordVisible by remember { mutableStateOf(false) }
@@ -101,9 +121,8 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
                             if (list.isNotEmpty()) {
                                 val sortedList = list.sortedDescending()
                                 versions = sortedList
-                                if (!list.contains(fwVersion.value) || fwVersion.value == "V0001") {
-                                    store.saveFwVersion(sortedList.first())
-                                }
+                                // Always select the latest available version
+                                store.saveFwVersion(sortedList.first())
                             }
                         }
                     }
@@ -218,15 +237,17 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
             if (useHotspot.value) {
                 // Hotspot credentials
                 OutlinedTextField(
-                    value = hotspotSsid.value,
-                    onValueChange = { scope.launch { store.saveFwHotspotSsid(it) } },
+                    value = localHotspotSsid ?: "",
+                    onValueChange = { localHotspotSsid = it },
                     label = { Text("Hotspot SSID") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = hotspotPwd.value,
-                    onValueChange = { scope.launch { store.saveFwHotspotPwd(it) } },
+                    value = localHotspotPwd ?: "",
+                    onValueChange = { localHotspotPwd = it },
                     label = { Text("Hotspot Password") },
+                    singleLine = true,
                     visualTransformation = if (hotspotPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = { hotspotPasswordVisible = !hotspotPasswordVisible }) {
@@ -246,15 +267,17 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
             } else {
                 // WiFi credentials
                 OutlinedTextField(
-                    value = wlanSsid.value,
-                    onValueChange = { scope.launch { store.saveFwWlanSsid(it) } },
+                    value = localWlanSsid ?: "",
+                    onValueChange = { localWlanSsid = it },
                     label = { Text("WiFi SSID") },
+                    singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = wlanPwd.value,
-                    onValueChange = { scope.launch { store.saveFwWlanPwd(it) } },
+                    value = localWlanPwd ?: "",
+                    onValueChange = { localWlanPwd = it },
                     label = { Text("WiFi Password") },
+                    singleLine = true,
                     visualTransformation = if (wlanPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                     trailingIcon = {
                         IconButton(onClick = { wlanPasswordVisible = !wlanPasswordVisible }) {
@@ -272,8 +295,8 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
 
             Button(
                 onClick = {
-                    val ssid = if (useHotspot.value) hotspotSsid.value else wlanSsid.value
-                    val pwd = if (useHotspot.value) hotspotPwd.value else wlanPwd.value
+                    val ssid = if (useHotspot.value) (localHotspotSsid ?: "") else (localWlanSsid ?: "")
+                    val pwd = if (useHotspot.value) (localHotspotPwd ?: "") else (localWlanPwd ?: "")
                     startFirmwareUpdate(context, autoDownload.value, fwVersion.value, ssid, pwd)
                 },
                 modifier = Modifier.fillMaxWidth(),
