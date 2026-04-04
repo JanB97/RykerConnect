@@ -12,21 +12,26 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.times
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
@@ -45,6 +50,10 @@ fun MainUnitCard(
     isAssociated: Boolean,
     isConnected: Boolean,
     onNavigateToUpdate: () -> Unit,
+    onNavigateToSettings: () -> Unit,
+    firmwareStatus: String?,
+    isUpdateAvailable: Boolean,
+    versionsBehind: Int,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     sharedTransitionScope: SharedTransitionScope,
@@ -56,8 +65,6 @@ fun MainUnitCard(
     val configuration = LocalConfiguration.current
     val dpHeight = configuration.screenHeightDp.toFloat()
 
-    var showResetDialog by remember { mutableStateOf(false) }
-    var resetPin by remember { mutableStateOf("") }
     val expandRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
@@ -83,30 +90,94 @@ fun MainUnitCard(
                     )
                 )
         ) {
-            Image(
-                painter = rememberDrawablePainter(
-                    drawable = if (mainUnitDrawable.isRunning) mainUnitDrawable else mainUnitDrawable.getFrame(39)
-                ),
-                contentDescription = "",
-                alignment = Alignment.Center,
-                modifier = Modifier
-                    .align(Alignment.CenterHorizontally)
-                    .padding(start = 19.dp, top = 18.dp, end = 19.dp)
-                    .sizeIn(
-                        minWidth = 1.dp,
-                        minHeight = 1.dp,
-                        maxWidth = 640.dp,
-                        maxHeight = dpHeight.times(0.75.dp)
-                    )
-            )
+            // Image with reinit button overlaid top-right
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Image(
+                    painter = rememberDrawablePainter(
+                        drawable = if (mainUnitDrawable.isRunning) mainUnitDrawable else mainUnitDrawable.getFrame(39)
+                    ),
+                    contentDescription = "",
+                    alignment = Alignment.Center,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .padding(start = 19.dp, top = 18.dp, end = 19.dp)
+                        .sizeIn(
+                            minWidth = 1.dp,
+                            minHeight = 1.dp,
+                            maxWidth = 640.dp,
+                            maxHeight = dpHeight.times(0.75.dp)
+                        )
+                )
 
+                // Display Reinit – top right, does not shift title
+                IconButton(
+                    onClick = {
+                        RykerConnectApplication.activeConnection.value?.sendDisplayReinit()
+                    },
+                    enabled = isConnected,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(4.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = "Reinit Display",
+                        tint = if (isConnected)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    )
+                }
+
+                // Firmware status badge – top left, opposite of reinit button
+                if (firmwareStatus != null) {
+                    val isDark = isSystemInDarkTheme()
+                    val bannerColor = when {
+                        versionsBehind == 0 -> if (isDark) Color(0xFFB4FFAB) else Color(0xFF1ABA1A)
+                        versionsBehind in 1..2 -> if (isDark) Color(0xFFFFD19A) else Color(0xFFC87E00)
+                        else -> if (isDark) Color(0xFFFFB4AB) else Color(0xFFC62828)
+                    }
+                    val bannerBg = when {
+                        versionsBehind == 0 -> if (isDark) Color(0x401ABA1A) else Color(0x40B4FFAB)
+                        versionsBehind in 1..2 -> if (isDark) Color(0x40C87E00) else Color(0x40FFD19A)
+                        else -> if (isDark) Color(0x40C62828) else Color(0x40FFCDD2)
+                    }
+                    val bannerIcon = if (versionsBehind == 0) Icons.Default.CheckCircle else Icons.Default.Warning
+
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(8.dp)
+                            .background(bannerBg, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = bannerIcon,
+                            contentDescription = null,
+                            tint = bannerColor,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = firmwareStatus,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = bannerColor
+                        )
+                    }
+                }
+            }
+
+            // Title row – title center, expand icon
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 6.dp),
+                    .padding(bottom = 6.dp, start = 12.dp, end = 12.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Spacer(modifier = Modifier.weight(1f))
+
                 Text(
                     text = stringResource(id = R.string.str_main_device),
                     style = MaterialTheme.typography.headlineSmall
@@ -117,6 +188,8 @@ fun MainUnitCard(
                     contentDescription = if (expanded) "Collapse" else "Expand",
                     modifier = Modifier.rotate(expandRotation)
                 )
+
+                Spacer(modifier = Modifier.weight(1f))
             }
 
             if (expanded) {
@@ -160,21 +233,22 @@ fun MainUnitCard(
                         .padding(horizontal = 16.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedButton(
-                        onClick = {
-                            RykerConnectApplication.activeConnection.value?.sendFactoryReset(0)
-                            showResetDialog = true
-                        },
-                        modifier = Modifier.weight(1f),
-                        enabled = isConnected,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = if (isConnected) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f))
-                    ) {
-                        Icon(Icons.Default.RestartAlt, contentDescription = null)
-                        Spacer(Modifier.width(4.dp))
-                        Text("Reset")
-                    }
-
                     with(sharedTransitionScope) {
+                        OutlinedButton(
+                            onClick = { onNavigateToSettings() },
+                            modifier = Modifier
+                                .weight(1f)
+                                .sharedBounds(
+                                    sharedContentState = rememberSharedContentState("settings-bounds"),
+                                    animatedVisibilityScope = animatedVisibilityScope
+                                ),
+                            enabled = isConnected
+                        ) {
+                            Icon(Icons.Default.Settings, contentDescription = null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("Settings")
+                        }
+
                         OutlinedButton(
                             onClick = { onNavigateToUpdate() },
                             modifier = Modifier
@@ -193,46 +267,5 @@ fun MainUnitCard(
                 }
             }
         }
-    }
-
-    if (showResetDialog) {
-        AlertDialog(
-            onDismissRequest = { showResetDialog = false },
-            title = { Text("Reset Main Unit") },
-            text = {
-                Column {
-                    Text("Please enter the 4-digit PIN displayed on your RykerConnect screen.")
-                    Spacer(modifier = Modifier.height(16.dp))
-                    OutlinedTextField(
-                        value = resetPin,
-                        onValueChange = { if (it.length <= 4) resetPin = it },
-                        label = { Text("PIN") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val pinInt = resetPin.toIntOrNull()
-                        if (pinInt != null) {
-                            RykerConnectApplication.activeConnection.value?.sendFactoryReset(pinInt)
-                            showResetDialog = false
-                            resetPin = ""
-                        }
-                    },
-                    enabled = resetPin.length == 4
-                ) {
-                    Text("Confirm Reset")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showResetDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
     }
 }

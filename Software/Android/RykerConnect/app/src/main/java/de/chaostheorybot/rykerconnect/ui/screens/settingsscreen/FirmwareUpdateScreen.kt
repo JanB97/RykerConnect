@@ -48,13 +48,29 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
     val useHotspot = store.getFwUseHotspot.collectAsState(initial = false)
     val wlanSsid = store.getFwWlanSsid.collectAsState(initial = "")
     val wlanPwd = store.getFwWlanPwd.collectAsState(initial = "")
+    val hotspotSsid = store.getFwHotspotSsid.collectAsState(initial = "")
+    val hotspotPwd = store.getFwHotspotPwd.collectAsState(initial = "")
 
-    var passwordVisible by remember { mutableStateOf(false) }
+    var wlanPasswordVisible by remember { mutableStateOf(false) }
+    var hotspotPasswordVisible by remember { mutableStateOf(false) }
     var versions by remember { mutableStateOf(listOf("V0001")) }
     var isFetching by remember { mutableStateOf(false) }
 
+    // Installed firmware version from ESP
+    var installedFwVersion by remember { mutableStateOf<String?>(null) }
+
     val activeConnection by RykerConnectApplication.activeConnection.collectAsState()
     val isBleConnected by (activeConnection?.isConnected ?: remember { kotlinx.coroutines.flow.MutableStateFlow(false) }).collectAsState()
+
+    // Tab state: 0 = Hotspot, 1 = WiFi
+    val selectedTab = if (useHotspot.value) 0 else 1
+
+    // Read installed firmware version from ESP
+    LaunchedEffect(activeConnection, isBleConnected) {
+        if (isBleConnected && activeConnection != null) {
+            installedFwVersion = activeConnection?.readFirmwareVersion()
+        }
+    }
 
     LaunchedEffect(Unit) {
         isFetching = true
@@ -121,6 +137,15 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            // ── Installed version ────────────────────────────────────────
+            if (installedFwVersion != null) {
+                Text(
+                    "Installed: $installedFwVersion",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -173,58 +198,83 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
 
             HorizontalDivider()
 
+            // ── Connection Type Tabs ─────────────────────────────────────
             Text("Connection Type", style = MaterialTheme.typography.labelMedium)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RadioButton(
-                    selected = useHotspot.value,
-                    onClick = { scope.launch { store.saveFwUseHotspot(true) } }
+
+            PrimaryTabRow(selectedTabIndex = selectedTab) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { scope.launch { store.saveFwUseHotspot(true) } },
+                    text = { Text("Hotspot") }
                 )
-                Text("Hotspot")
-                Spacer(Modifier.width(16.dp))
-                RadioButton(
-                    selected = !useHotspot.value,
-                    onClick = { scope.launch { store.saveFwUseHotspot(false) } }
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { scope.launch { store.saveFwUseHotspot(false) } },
+                    text = { Text("WiFi") }
                 )
-                Text("Manual WLAN")
             }
 
-            OutlinedTextField(
-                value = wlanSsid.value,
-                onValueChange = { scope.launch { store.saveFwWlanSsid(it) } },
-                label = { Text(if (useHotspot.value) "Hotspot SSID" else "WLAN SSID") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = wlanPwd.value,
-                onValueChange = { scope.launch { store.saveFwWlanPwd(it) } },
-                label = { Text(if (useHotspot.value) "Hotspot Password" else "WLAN Password") },
-                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
-                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
-                        Icon(
-                            imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                            contentDescription = if (passwordVisible) "Hide password" else "Show password"
-                        )
-                    }
-                },
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            AnimatedVisibility(
-                visible = useHotspot.value,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
+            // ── Credential fields based on selected tab ──────────────────
+            if (useHotspot.value) {
+                // Hotspot credentials
+                OutlinedTextField(
+                    value = hotspotSsid.value,
+                    onValueChange = { scope.launch { store.saveFwHotspotSsid(it) } },
+                    label = { Text("Hotspot SSID") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = hotspotPwd.value,
+                    onValueChange = { scope.launch { store.saveFwHotspotPwd(it) } },
+                    label = { Text("Hotspot Password") },
+                    visualTransformation = if (hotspotPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { hotspotPasswordVisible = !hotspotPasswordVisible }) {
+                            Icon(
+                                imageVector = if (hotspotPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                contentDescription = if (hotspotPasswordVisible) "Hide password" else "Show password"
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Text(
                     "Note: Ensure your Hotspot is active before starting the update.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary
                 )
+            } else {
+                // WiFi credentials
+                OutlinedTextField(
+                    value = wlanSsid.value,
+                    onValueChange = { scope.launch { store.saveFwWlanSsid(it) } },
+                    label = { Text("WiFi SSID") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = wlanPwd.value,
+                    onValueChange = { scope.launch { store.saveFwWlanPwd(it) } },
+                    label = { Text("WiFi Password") },
+                    visualTransformation = if (wlanPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = {
+                        IconButton(onClick = { wlanPasswordVisible = !wlanPasswordVisible }) {
+                            Icon(
+                                imageVector = if (wlanPasswordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                                contentDescription = if (wlanPasswordVisible) "Hide password" else "Show password"
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
+
+            HorizontalDivider()
 
             Button(
                 onClick = {
-                    startFirmwareUpdate(context, autoDownload.value, fwVersion.value, wlanSsid.value, wlanPwd.value)
+                    val ssid = if (useHotspot.value) hotspotSsid.value else wlanSsid.value
+                    val pwd = if (useHotspot.value) hotspotPwd.value else wlanPwd.value
+                    startFirmwareUpdate(context, autoDownload.value, fwVersion.value, ssid, pwd)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = isBleConnected
@@ -274,9 +324,4 @@ private fun startFirmwareUpdate(
         context.startActivity(browserIntent)
     }
 }
-
-
-
-
-
 

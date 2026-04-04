@@ -42,6 +42,8 @@ class RykerConnectStore(private val context: Context) {
         private val FW_USE_HOTSPOT = booleanPreferencesKey("fw_use_hotspot")
         private val FW_WLAN_SSID = stringPreferencesKey("fw_wlan_ssid")
         private val FW_WLAN_PWD = stringPreferencesKey("fw_wlan_pwd")
+        private val FW_HOTSPOT_SSID = stringPreferencesKey("fw_hotspot_ssid")
+        private val FW_HOTSPOT_PWD = stringPreferencesKey("fw_hotspot_pwd")
     }
 
     // Getters
@@ -71,6 +73,8 @@ class RykerConnectStore(private val context: Context) {
     val getFwUseHotspot: Flow<Boolean> = context.dataStore.data.map { it[FW_USE_HOTSPOT] ?: false }
     val getFwWlanSsid: Flow<String> = context.dataStore.data.map { it[FW_WLAN_SSID] ?: "" }
     val getFwWlanPwd: Flow<String> = context.dataStore.data.map { it[FW_WLAN_PWD] ?: "" }
+    val getFwHotspotSsid: Flow<String> = context.dataStore.data.map { it[FW_HOTSPOT_SSID] ?: "" }
+    val getFwHotspotPwd: Flow<String> = context.dataStore.data.map { it[FW_HOTSPOT_PWD] ?: "" }
 
     // Save Methods
     suspend fun saveFistLaunch(token: Boolean) { context.dataStore.edit { it[FIRST_LAUNCH_TOKEN] = token } }
@@ -88,6 +92,8 @@ class RykerConnectStore(private val context: Context) {
     suspend fun saveFwUseHotspot(value: Boolean) { context.dataStore.edit { it[FW_USE_HOTSPOT] = value } }
     suspend fun saveFwWlanSsid(value: String) { context.dataStore.edit { it[FW_WLAN_SSID] = value } }
     suspend fun saveFwWlanPwd(value: String) { context.dataStore.edit { it[FW_WLAN_PWD] = value } }
+    suspend fun saveFwHotspotSsid(value: String) { context.dataStore.edit { it[FW_HOTSPOT_SSID] = value } }
+    suspend fun saveFwHotspotPwd(value: String) { context.dataStore.edit { it[FW_HOTSPOT_PWD] = value } }
 
     suspend fun clearMediaSaves() {
         context.dataStore.edit { preferences ->

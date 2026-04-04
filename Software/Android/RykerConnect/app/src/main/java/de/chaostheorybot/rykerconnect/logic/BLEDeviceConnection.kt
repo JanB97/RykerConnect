@@ -13,6 +13,7 @@ import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
+import de.chaostheorybot.rykerconnect.data.EspSettings
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -33,6 +34,10 @@ val NETWORK_UUID: UUID = UUID.fromString("49c7fba8-9ba7-474b-b8a5-a5431e057e23")
 val TIME_UUID: UUID = UUID.fromString("a41dcc81-d45e-4445-99bb-38c37c1ef1c8")
 val FIRMWARE_RESET_UUID: UUID = UUID.fromString("18cb54fe-45e8-4819-a262-24b731c8b236")
 val FIRMWARE_UPDATE_UUID: UUID = UUID.fromString("1d1306c5-98d9-4998-8dfd-35136295575f")
+val DISPLAY_BRIGHTNESS_UUID: UUID = UUID.fromString("7bc28f30-10bc-46e2-b84b-96e0545c2f5c")
+val ESP_SETTINGS_UUID: UUID = UUID.fromString("05f7c3e4-daac-4953-8c71-20eacdf0c7a1")
+val DISPLAY_REINIT_UUID: UUID = UUID.fromString("3a6e4b2c-8f71-4d09-b5a3-c7e2f1d08a94")
+val FIRMWARE_VERSION_UUID: UUID = UUID.fromString("fb2385da-5290-4513-bb0c-6d0b21de619a")
 
 @SuppressLint("MissingPermission") // Permission wird an allen Aufrufstellen via PermissionUtils geprüft
 class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT) constructor(
@@ -45,6 +50,7 @@ class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONN
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val operationMutex = Mutex()
     private var pendingWrite: CompletableDeferred<Int>? = null
+    private var pendingRead: CompletableDeferred<ByteArray?>? = null
 
     private val charCache = mutableMapOf<UUID, BluetoothGattCharacteristic>()
 
@@ -79,6 +85,37 @@ class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONN
             pendingWrite?.complete(status)
             pendingWrite = null
         }
+
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray,
+            status: Int
+        ) {
+            super.onCharacteristicRead(gatt, characteristic, value, status)
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                pendingRead?.complete(value)
+            } else {
+                pendingRead?.complete(null)
+            }
+            pendingRead = null
+        }
+
+        @Suppress("DEPRECATION")
+        @Deprecated("Deprecated in Java")
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt?,
+            characteristic: BluetoothGattCharacteristic?,
+            status: Int
+        ) {
+            super.onCharacteristicRead(gatt, characteristic, status)
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                pendingRead?.complete(characteristic?.value)
+            } else {
+                pendingRead?.complete(null)
+            }
+            pendingRead = null
+        }
     }
 
     private var gatt: BluetoothGatt? = null
@@ -107,6 +144,24 @@ class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONN
         gatt = null
         isConnected.value = false
         charCache.clear()
+    }
+
+    private suspend fun readCharacteristicAsync(uuid: UUID): ByteArray? {
+        return operationMutex.withLock {
+            val characteristic = getCharacteristic(uuid) ?: return@withLock null
+            if (!isConnected.value || gatt == null) return@withLock null
+
+            val deferred = CompletableDeferred<ByteArray?>()
+            pendingRead = deferred
+
+            val initiated = gatt?.readCharacteristic(characteristic) ?: false
+            if (!initiated) {
+                pendingRead = null
+                return@withLock null
+            }
+
+            withTimeoutOrNull(3000) { deferred.await() }
+        }
     }
 
     private fun writeCharacteristics(uuid: UUID, data: ByteArray, noResponse: Boolean = false) {
@@ -233,5 +288,72 @@ class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONN
             command += "\u0003$url"
         }
         writeCharacteristics(FIRMWARE_UPDATE_UUID, command.toByteArray(Charsets.UTF_8))
+    }
+
+    suspend fun readSettings(): EspSettings? {
+        val data = readCharacteristicAsync(ESP_SETTINGS_UUID) ?: return null
+        return EspSettings.fromBytes(data)
+    }
+
+    fun writeSettings(settings: EspSettings) {
+        writeCharacteristics(ESP_SETTINGS_UUID, settings.toWriteBytes())
+    }
+
+    suspend fun writeSettingsAsync(settings: EspSettings): Boolean {
+        return writeCharacteristicsAsync(ESP_SETTINGS_UUID, settings.toWriteBytes())
+    }
+
+    private suspend fun writeCharacteristicsAsync(uuid: UUID, data: ByteArray): Boolean {
+        return operationMutex.withLock {
+            val characteristic = getCharacteristic(uuid) ?: return@withLock false
+            var success = false
+            var count = 0
+            while (count < 2 && !success) {
+                if (!isConnected.value || gatt == null) break
+
+                val deferred = CompletableDeferred<Int>()
+                pendingWrite = deferred
+
+                val initiated = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    gatt?.writeCharacteristic(characteristic, data, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) == BluetoothStatusCodes.SUCCESS
+                } else {
+                    @Suppress("DEPRECATION")
+                    characteristic.value = data
+                    characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+                    @Suppress("DEPRECATION")
+                    gatt?.writeCharacteristic(characteristic) ?: false
+                }
+
+                if (initiated) {
+                    val status = withTimeoutOrNull(1000) { deferred.await() }
+                    if (status == BluetoothGatt.GATT_SUCCESS) success = true
+                }
+
+                if (!success) {
+                    count++
+                    pendingWrite = null
+                    delay(100)
+                }
+            }
+            success
+        }
+    }
+
+    fun sendDisplayReinit() {
+        writeCharacteristics(DISPLAY_REINIT_UUID, byteArrayOf(0x01))
+    }
+
+    fun writeDisplayBrightness(brightness: Int) {
+        writeCharacteristics(DISPLAY_BRIGHTNESS_UUID, byteArrayOf(brightness.toByte()))
+    }
+
+    suspend fun readFirmwareVersion(): String? {
+        val data = readCharacteristicAsync(FIRMWARE_VERSION_UUID) ?: return null
+        if (data.size < 2) return null
+        val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+        val version = buf.getShort().toInt() and 0xFFFF
+        val major = (version shr 8) and 0xFF
+        val minor = version and 0xFF
+        return "V%02d.%02d".format(major, minor)
     }
 }

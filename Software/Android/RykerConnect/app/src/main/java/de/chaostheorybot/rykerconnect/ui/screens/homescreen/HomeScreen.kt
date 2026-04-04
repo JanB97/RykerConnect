@@ -42,11 +42,12 @@ import de.chaostheorybot.rykerconnect.ui.screens.homescreen.cards.IntercomCard
 import de.chaostheorybot.rykerconnect.ui.screens.homescreen.cards.MainUnitCard
 import de.chaostheorybot.rykerconnect.ui.screens.homescreen.cards.ServiceCard
 import de.chaostheorybot.rykerconnect.ui.screens.servicescreen.CustomizeServiceScreen
+import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.DeviceSettingsScreen
 import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.FirmwareUpdateScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 
-private enum class ActiveOverlay { UPDATE, SERVICE, INTERCOM }
+private enum class ActiveOverlay { UPDATE, SERVICE, INTERCOM, SETTINGS }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
@@ -71,6 +72,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
     // REAKTIVE ABFRAGE DER VERBINDUNG
     val activeConnection by RykerConnectApplication.activeConnection.collectAsState()
     val isBleConnected by (activeConnection?.isConnected ?: remember { MutableStateFlow(false) }).collectAsState()
+    val bleServices by (activeConnection?.services ?: remember { MutableStateFlow(emptyList()) }).collectAsState()
 
     val associatedMac = store.getBLEMACToken.collectAsState(initial = "")
     val isAssociated = associatedMac.value.isNotEmpty()
@@ -100,6 +102,75 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
     // Overlay state – defined outside AnimatedVisibility so it survives transitions
     var activeOverlay by remember { mutableStateOf<ActiveOverlay?>(null) }
     var mainCardExpanded by remember { mutableStateOf(false) }
+
+    // Firmware version info
+    var installedFwVersion by remember { mutableStateOf<String?>(null) }
+    var latestFwVersion by remember { mutableStateOf<String?>(null) }
+    var allFwVersions by remember { mutableStateOf<List<String>>(emptyList()) }
+
+    // Read firmware version from ESP once services are discovered
+    LaunchedEffect(activeConnection, bleServices) {
+        if (activeConnection != null && bleServices.isNotEmpty()) {
+            delay(200) // small buffer to ensure GATT is fully ready
+            installedFwVersion = activeConnection?.readFirmwareVersion()
+            Log.d("HomeScreen", "Installed firmware version: $installedFwVersion")
+        } else {
+            installedFwVersion = null
+        }
+    }
+
+    // Fetch latest available version from GitHub
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            try {
+                val client = okhttp3.OkHttpClient()
+                val url = "https://api.github.com/repos/JanB97/RykerConnect/contents/Firmware/MainUnit_ESP32S3-REV01?t=${System.currentTimeMillis()}"
+                val request = okhttp3.Request.Builder()
+                    .url(url)
+                    .header("Accept", "application/vnd.github+json")
+                    .header("User-Agent", "RykerConnect-App")
+                    .build()
+                val response = client.newCall(request).execute()
+                response.use { resp ->
+                    if (resp.isSuccessful) {
+                        val body = resp.body?.string()
+                        if (body != null) {
+                            val json = org.json.JSONArray(body)
+                            val list = mutableListOf<String>()
+                            for (i in 0 until json.length()) {
+                                val name = json.getJSONObject(i).getString("name")
+                                if (name.startsWith("V", ignoreCase = true)) list.add(name)
+                            }
+                            if (list.isNotEmpty()) {
+                                val sorted = list.sortedDescending()
+                                allFwVersions = sorted
+                                latestFwVersion = sorted.first()
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) { }
+        }
+    }
+
+    // Build firmware status string and versions behind count
+    val versionsBehind = remember(installedFwVersion, allFwVersions) {
+        if (installedFwVersion == null || allFwVersions.isEmpty()) 0
+        else {
+            val idx = allFwVersions.indexOf(installedFwVersion)
+            if (idx < 0) allFwVersions.size // not found = very outdated
+            else idx // index 0 = latest, 1 = one behind, etc.
+        }
+    }
+    val firmwareStatus = remember(installedFwVersion, latestFwVersion, versionsBehind) {
+        if (installedFwVersion == null) null
+        else if (versionsBehind == 0) "Up to date"
+        else if (versionsBehind == 1) "Update available"
+        else "Update available ($versionsBehind versions behind)"
+    }
+    val isUpdateAvailable = remember(installedFwVersion, latestFwVersion) {
+        installedFwVersion != null && latestFwVersion != null && installedFwVersion != latestFwVersion
+    }
 
     BackHandler(enabled = activeOverlay != null) {
         activeOverlay = null
@@ -138,6 +209,10 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                             isAssociated = isAssociated,
                             isConnected = isBleConnected,
                             onNavigateToUpdate = { activeOverlay = ActiveOverlay.UPDATE },
+                            onNavigateToSettings = { activeOverlay = ActiveOverlay.SETTINGS },
+                            firmwareStatus = firmwareStatus,
+                            isUpdateAvailable = isUpdateAvailable,
+                            versionsBehind = versionsBehind,
                             expanded = mainCardExpanded,
                             onExpandedChange = { mainCardExpanded = it },
                             sharedTransitionScope = this@SharedTransitionLayout,
@@ -211,6 +286,25 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                     .background(MaterialTheme.colorScheme.surface)
             ) {
                 CustomizeServiceScreen(onBack = { activeOverlay = null }, store = store)
+            }
+        }
+
+        // ── Settings overlay ─────────────────────────────────────────────
+        AnimatedVisibility(
+            visible = activeOverlay == ActiveOverlay.SETTINGS,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .sharedBounds(
+                        sharedContentState = rememberSharedContentState("settings-bounds"),
+                        animatedVisibilityScope = this@AnimatedVisibility
+                    )
+                    .background(MaterialTheme.colorScheme.surface)
+            ) {
+                DeviceSettingsScreen(onBack = { activeOverlay = null })
             }
         }
 
