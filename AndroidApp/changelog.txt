@@ -1,2 +1,6 @@
+V1.1:
+- fix wifi credential fields and state
+- fix latest firmware was not selected
+
 V1.0:
 - initial full release
