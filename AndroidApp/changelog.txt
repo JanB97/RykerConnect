@@ -1,3 +1,9 @@
+V1.2:
+- fix wifi credentials not beeing saved / not beeing display
+- added changelog in firmware update view.
+- add button listener to "Update available" tag
+- bugfixes to "select / reselect device" function
+
 V1.1:
 - fix wifi credential fields and state
 - fix latest firmware was not selected

@@ -13,6 +13,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,7 +50,7 @@ fun MainUnitCard(
     companion: () -> Unit,
     isAssociated: Boolean,
     isConnected: Boolean,
-    onNavigateToUpdate: () -> Unit,
+    onNavigateToUpdate: (fromBanner: Boolean) -> Unit,
     onNavigateToSettings: () -> Unit,
     firmwareStatus: String?,
     isUpdateAvailable: Boolean,
@@ -144,26 +145,38 @@ fun MainUnitCard(
                     }
                     val bannerIcon = if (versionsBehind == 0) Icons.Default.CheckCircle else Icons.Default.Warning
 
-                    Row(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(8.dp)
-                            .background(bannerBg, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = bannerIcon,
-                            contentDescription = null,
-                            tint = bannerColor,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = firmwareStatus,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = bannerColor
-                        )
+                    with(sharedTransitionScope) {
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(8.dp)
+                                .then(
+                                    if (versionsBehind > 0) Modifier.sharedBounds(
+                                        sharedContentState = rememberSharedContentState("update-banner-bounds"),
+                                        animatedVisibilityScope = animatedVisibilityScope
+                                    ) else Modifier
+                                )
+                                .background(bannerBg, RoundedCornerShape(8.dp))
+                                .then(
+                                    if (versionsBehind > 0) Modifier.clickable { onNavigateToUpdate(true) }
+                                    else Modifier
+                                )
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = bannerIcon,
+                                contentDescription = null,
+                                tint = bannerColor,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text(
+                                text = firmwareStatus,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = bannerColor
+                            )
+                        }
                     }
                 }
             }
@@ -210,7 +223,9 @@ fun MainUnitCard(
                                     store.saveBLEMAC("")
                                     RykerConnectApplication.activeConnection.value?.disconnect()
                                     RykerConnectApplication.activeConnection.value = null
-                                    companion()
+                                    // companion() wird NICHT sofort aufgerufen: der ESP braucht nach dem
+                                    // Trennen etwas Zeit, um BLE-Advertising neu zu starten. Der User
+                                    // sieht den "Select Device"-Button und kann ihn drücken, wenn bereit.
                                 } catch (e: Exception) {
                                     Log.e("MainUnitCard", "Disassociate failed: ${e.message}")
                                 }
@@ -250,11 +265,11 @@ fun MainUnitCard(
                         }
 
                         OutlinedButton(
-                            onClick = { onNavigateToUpdate() },
+                            onClick = { onNavigateToUpdate(false) },
                             modifier = Modifier
                                 .weight(1f)
                                 .sharedBounds(
-                                    sharedContentState = rememberSharedContentState("update-bounds"),
+                                    sharedContentState = rememberSharedContentState("update-button-bounds"),
                                     animatedVisibilityScope = animatedVisibilityScope
                                 ),
                             enabled = isConnected

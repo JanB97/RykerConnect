@@ -48,6 +48,9 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result -> handleCompanionResult(result) }
 
+    /** Verhindert mehrfache gleichzeitige Assoziations-Scans */
+    @Volatile private var isAssociating = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -85,6 +88,10 @@ class MainActivity : ComponentActivity() {
 
     fun setupCompanion(store: RykerConnectStore) {
         if (!PermissionUtils.hasBluetoothConnect(this)) return
+        if (isAssociating) {
+            Log.d("MainActivity", "setupCompanion: already associating, skipping")
+            return
+        }
         lifecycleScope.launch {
             val deviceManager = getSystemService(COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
             val macAddressToPair = store.getBLEMACToken.firstOrNull() ?: return@launch
@@ -115,6 +122,7 @@ class MainActivity : ComponentActivity() {
             }
 
             if (!alreadyAssociated) {
+                isAssociating = true
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     associateApi33(deviceManager, pairingRequest, store)
                 } else {
@@ -161,6 +169,7 @@ class MainActivity : ComponentActivity() {
             }
 
             override fun onAssociationCreated(associationInfo: AssociationInfo) {
+                isAssociating = false
                 val macAddress = associationInfo.deviceMacAddress.toString()
                 lifecycleScope.launch { store.saveBLEMAC(macAddress) }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
@@ -181,6 +190,7 @@ class MainActivity : ComponentActivity() {
             }
 
             override fun onFailure(errorMessage: CharSequence?) {
+                isAssociating = false
                 Log.e("MainActivity", "Association failed: $errorMessage")
             }
         })
@@ -197,7 +207,9 @@ class MainActivity : ComponentActivity() {
                 launchIntentSender(intentSender)
             }
 
-            override fun onAssociationCreated(associationInfo: AssociationInfo) {}
+            override fun onAssociationCreated(associationInfo: AssociationInfo) {
+                isAssociating = false
+            }
 
             @Deprecated("Legacy")
             override fun onDeviceFound(intentSender: IntentSender) {
@@ -205,6 +217,7 @@ class MainActivity : ComponentActivity() {
             }
 
             override fun onFailure(errorMessage: CharSequence?) {
+                isAssociating = false
                 Log.e("MainActivity", "Association failed: $errorMessage")
             }
         }, null)

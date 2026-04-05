@@ -11,18 +11,24 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -31,6 +37,8 @@ import androidx.core.net.toUri
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -47,32 +55,37 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
     val fwVersion = store.getFwVersion.collectAsState(initial = "V0001")
     val useHotspot = store.getFwUseHotspot.collectAsState(initial = false)
 
-    // Load stored credentials once, then use local state for editing
-    val storedWlanSsid by store.getFwWlanSsid.collectAsState(initial = "")
-    val storedWlanPwd by store.getFwWlanPwd.collectAsState(initial = "")
-    val storedHotspotSsid by store.getFwHotspotSsid.collectAsState(initial = "")
-    val storedHotspotPwd by store.getFwHotspotPwd.collectAsState(initial = "")
+    // Local mutable state for text fields – loaded once via LaunchedEffect(Unit)
+    var localWlanSsid by remember { mutableStateOf("") }
+    var localWlanPwd by remember { mutableStateOf("") }
+    var localHotspotSsid by remember { mutableStateOf("") }
+    var localHotspotPwd by remember { mutableStateOf("") }
 
-    // Local mutable state for text fields – initialized from DataStore once
-    var localWlanSsid by remember { mutableStateOf<String?>(null) }
-    var localWlanPwd by remember { mutableStateOf<String?>(null) }
-    var localHotspotSsid by remember { mutableStateOf<String?>(null) }
-    var localHotspotPwd by remember { mutableStateOf<String?>(null) }
-
-    // Seed local state from DataStore (only when null, i.e. first composition)
-    LaunchedEffect(storedWlanSsid) { if (localWlanSsid == null) localWlanSsid = storedWlanSsid }
-    LaunchedEffect(storedWlanPwd) { if (localWlanPwd == null) localWlanPwd = storedWlanPwd }
-    LaunchedEffect(storedHotspotSsid) { if (localHotspotSsid == null) localHotspotSsid = storedHotspotSsid }
-    LaunchedEffect(storedHotspotPwd) { if (localHotspotPwd == null) localHotspotPwd = storedHotspotPwd }
-
-    // Persist local edits to DataStore whenever they change (debounced via LaunchedEffect)
-    LaunchedEffect(localWlanSsid) { localWlanSsid?.let { store.saveFwWlanSsid(it) } }
-    LaunchedEffect(localWlanPwd) { localWlanPwd?.let { store.saveFwWlanPwd(it) } }
-    LaunchedEffect(localHotspotSsid) { localHotspotSsid?.let { store.saveFwHotspotSsid(it) } }
-    LaunchedEffect(localHotspotPwd) { localHotspotPwd?.let { store.saveFwHotspotPwd(it) } }
+    // Load credentials once on first composition via one-shot read (avoids initial="" race condition)
+    LaunchedEffect(Unit) {
+        localWlanSsid = store.getFwWlanSsid.first()
+        localWlanPwd = store.getFwWlanPwd.first()
+        localHotspotSsid = store.getFwHotspotSsid.first()
+        localHotspotPwd = store.getFwHotspotPwd.first()
+    }
 
     var wlanPasswordVisible by remember { mutableStateOf(false) }
     var hotspotPasswordVisible by remember { mutableStateOf(false) }
+
+    // Credential save feedback
+    var credSaveResult by remember { mutableStateOf<Boolean?>(null) }
+
+    // Auto-hide feedback banner after 3 seconds
+    LaunchedEffect(credSaveResult) {
+        if (credSaveResult != null) {
+            delay(3000)
+            credSaveResult = null
+        }
+    }
+
+    // Changelog state
+    var changelogText by remember { mutableStateOf<String?>(null) }
+    var showChangelog by remember { mutableStateOf(false) }
     var versions by remember { mutableStateOf(listOf("V0001")) }
     var isFetching by remember { mutableStateOf(false) }
 
@@ -131,6 +144,24 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
                 Log.e("FirmwareUpdateScreen", "Fetch versions failed", e)
             } finally {
                 isFetching = false
+            }
+
+            // Fetch changelog
+            try {
+                val client = OkHttpClient()
+                val clUrl = "https://raw.githubusercontent.com/JanB97/RykerConnect/main/Firmware/MainUnit_ESP32S3-REV01/changelog.txt?t=${System.currentTimeMillis()}"
+                val clRequest = Request.Builder()
+                    .url(clUrl)
+                    .header("User-Agent", "RykerConnect-App")
+                    .build()
+                val clResponse = client.newCall(clRequest).execute()
+                clResponse.use { resp ->
+                    if (resp.isSuccessful) {
+                        changelogText = resp.body?.string()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("FirmwareUpdateScreen", "Fetch changelog failed", e)
             }
         }
     }
@@ -199,6 +230,17 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
                 }
             }
 
+            // ── Changelog button – directly under version picker ──────────
+            OutlinedButton(
+                onClick = { showChangelog = true },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = changelogText != null
+            ) {
+                Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(if (changelogText != null) "View Changelog" else "Loading Changelog...")
+            }
+
             // Button zum Herunterladen der Datei für manuelles OTA
             AnimatedVisibility(
                 visible = !autoDownload.value,
@@ -237,14 +279,14 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
             if (useHotspot.value) {
                 // Hotspot credentials
                 OutlinedTextField(
-                    value = localHotspotSsid ?: "",
+                    value = localHotspotSsid,
                     onValueChange = { localHotspotSsid = it },
                     label = { Text("Hotspot SSID") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = localHotspotPwd ?: "",
+                    value = localHotspotPwd,
                     onValueChange = { localHotspotPwd = it },
                     label = { Text("Hotspot Password") },
                     singleLine = true,
@@ -264,17 +306,37 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.secondary
                 )
+
+                // Save Hotspot credentials button
+                FilledTonalButton(
+                    onClick = {
+                        scope.launch {
+                            try {
+                                store.saveFwHotspotSsid(localHotspotSsid)
+                                store.saveFwHotspotPwd(localHotspotPwd)
+                                credSaveResult = true
+                            } catch (_: Exception) {
+                                credSaveResult = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Save Hotspot Credentials")
+                }
             } else {
                 // WiFi credentials
                 OutlinedTextField(
-                    value = localWlanSsid ?: "",
+                    value = localWlanSsid,
                     onValueChange = { localWlanSsid = it },
                     label = { Text("WiFi SSID") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
-                    value = localWlanPwd ?: "",
+                    value = localWlanPwd,
                     onValueChange = { localWlanPwd = it },
                     label = { Text("WiFi Password") },
                     singleLine = true,
@@ -289,14 +351,66 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
                     },
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                // Save WiFi credentials button
+                FilledTonalButton(
+                    onClick = {
+                        scope.launch {
+                            try {
+                                store.saveFwWlanSsid(localWlanSsid)
+                                store.saveFwWlanPwd(localWlanPwd)
+                                credSaveResult = true
+                            } catch (_: Exception) {
+                                credSaveResult = false
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Save WiFi Credentials")
+                }
+            }
+
+            // ── Credential save feedback banner ──────────────────────────
+            AnimatedVisibility(
+                visible = credSaveResult != null,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                val isSuccess = credSaveResult == true
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            if (isSuccess) Color(0xFF4CAF50) else Color(0xFFF44336),
+                            MaterialTheme.shapes.small
+                        )
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = if (isSuccess) Icons.Default.CheckCircle else Icons.Default.Error,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = if (isSuccess) "Credentials saved" else "Failed to save credentials",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
             }
 
             HorizontalDivider()
 
             Button(
                 onClick = {
-                    val ssid = if (useHotspot.value) (localHotspotSsid ?: "") else (localWlanSsid ?: "")
-                    val pwd = if (useHotspot.value) (localHotspotPwd ?: "") else (localWlanPwd ?: "")
+                    val ssid = if (useHotspot.value) localHotspotSsid else localWlanSsid
+                    val pwd = if (useHotspot.value) localHotspotPwd else localWlanPwd
                     startFirmwareUpdate(context, autoDownload.value, fwVersion.value, ssid, pwd)
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -308,6 +422,27 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
             // Extra space at bottom so button is visible when keyboard is open
             Spacer(modifier = Modifier.height(16.dp))
         }
+    }
+
+    // ── Changelog Dialog ────────────────────────────────────────────────
+    if (showChangelog && changelogText != null) {
+        AlertDialog(
+            onDismissRequest = { showChangelog = false },
+            title = { Text("Firmware Changelog") },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        text = changelogText!!,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showChangelog = false }) {
+                    Text("Close")
+                }
+            }
+        )
     }
 }
 
@@ -347,4 +482,3 @@ private fun startFirmwareUpdate(
         context.startActivity(browserIntent)
     }
 }
-

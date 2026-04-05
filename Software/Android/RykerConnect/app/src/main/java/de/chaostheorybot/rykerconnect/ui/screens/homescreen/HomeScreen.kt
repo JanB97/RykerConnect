@@ -90,6 +90,17 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
         }
     }
 
+    // Auto-Connect beim App-Start: setupCompanion aufrufen, wenn bereits ein Gerät gespeichert ist.
+    // Dadurch wird startObservingDevicePresence aufgerufen und RykerDeviceService.onDeviceAppeared
+    // kann die Verbindung automatisch aufbauen, sobald das Gerät in Reichweite ist.
+    LaunchedEffect(Unit) {
+        val savedMac = store.getBLEMAC()
+        if (!savedMac.isNullOrEmpty()) {
+            delay(300) // kurzer Buffer nach Compose-Setup
+            companion()
+        }
+    }
+
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val intercomMAC = store.getSelectedMacToken.collectAsState(initial = "__EMPTY__")
     val listState = rememberLazyListState()
@@ -102,6 +113,8 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
     // Overlay state – defined outside AnimatedVisibility so it survives transitions
     var activeOverlay by remember { mutableStateOf<ActiveOverlay?>(null) }
     var mainCardExpanded by remember { mutableStateOf(false) }
+    // Tracks whether the update overlay was opened via the banner or the button
+    var updateFromBanner by remember { mutableStateOf(false) }
 
     // Firmware version info
     var installedFwVersion by remember { mutableStateOf<String?>(null) }
@@ -208,7 +221,10 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                             companion = companion,
                             isAssociated = isAssociated,
                             isConnected = isBleConnected,
-                            onNavigateToUpdate = { activeOverlay = ActiveOverlay.UPDATE },
+                            onNavigateToUpdate = { fromBanner ->
+                                updateFromBanner = fromBanner
+                                activeOverlay = ActiveOverlay.UPDATE
+                            },
                             onNavigateToSettings = { activeOverlay = ActiveOverlay.SETTINGS },
                             firmwareStatus = firmwareStatus,
                             isUpdateAvailable = isUpdateAvailable,
@@ -261,7 +277,9 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                 modifier = Modifier
                     .fillMaxSize()
                     .sharedBounds(
-                        sharedContentState = rememberSharedContentState("update-bounds"),
+                        sharedContentState = rememberSharedContentState(
+                            if (updateFromBanner) "update-banner-bounds" else "update-button-bounds"
+                        ),
                         animatedVisibilityScope = this@AnimatedVisibility
                     )
                     .background(MaterialTheme.colorScheme.surface)
