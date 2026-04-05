@@ -11,7 +11,7 @@
 //#define DEBUG
 #define SPLASHSCREEN
 
-#define VERSION 0x0004
+#define VERSION 0x0005
 
 #define OLED_WIDTH 320
 #define OLED_HEIGHT 132

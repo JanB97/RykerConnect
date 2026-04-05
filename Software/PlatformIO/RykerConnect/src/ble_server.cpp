@@ -280,11 +280,14 @@ void setupBLEServer()
     pServer->start();
 
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
+    pAdvertising->setName("RykerConnect-MainUnit");
     pAdvertising->setAppearance(0x0180);
     // pAdvertising->addServiceUUID((uint16_t)0x1849);
     pAdvertising->addServiceUUID(SERVICE_UUID);
     pAdvertising->enableScanResponse(true);
     pAdvertising->start();
+    D_println("BLE: Advertising started.");
+    D_printf("BLE Address: %s", NimBLEDevice::getAddress().toString().c_str());
     // hid->setBatteryLevel(100);
 
 #ifdef DEBUG
