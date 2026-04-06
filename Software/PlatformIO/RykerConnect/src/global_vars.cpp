@@ -117,6 +117,8 @@ unsigned long lastBLEActivityMillis = 0;
 bool lowBatteryDisplayed = false;
 unsigned long previousLowBatteryMillis = 0;
 String lowBatteryText = "";
+bool lowBatteryTriggeredPhone = false;
+bool lowBatteryTriggeredIntercom = false;
 #pragma endregion
 
 

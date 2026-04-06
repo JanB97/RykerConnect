@@ -59,10 +59,15 @@ void batteryCallback(int16_t value, uint8_t type)
         D_printf(" Intercom Battery: %i", intercom_battery_level);
     }
 
-    // Low battery warning check
+    // Low battery warning check (only trigger once per threshold crossing)
     bool phoneLow = (phone_battery_level > 0 && phone_battery_level <= sEEPROM.low_battery_threshold_phone);
     bool intercomLow = (intercom_battery_level > 0 && intercom_battery_level <= sEEPROM.low_battery_threshold_intercom);
-    if(phoneLow || intercomLow){
+    if(!phoneLow) lowBatteryTriggeredPhone = false;
+    if(!intercomLow) lowBatteryTriggeredIntercom = false;
+    bool showWarning = false;
+    if(phoneLow && !lowBatteryTriggeredPhone){ lowBatteryTriggeredPhone = true; showWarning = true; }
+    if(intercomLow && !lowBatteryTriggeredIntercom){ lowBatteryTriggeredIntercom = true; showWarning = true; }
+    if(showWarning){
         String text = "";
         if(phoneLow) text += "Phone: " + String(phone_battery_level) + "%";
         if(phoneLow && intercomLow) text += "  ";
@@ -98,8 +103,8 @@ void mediaDataCallback(const uint8_t* data, uint8_t size)
       localPlaystate = true;
     }
 
-    uint16_t localTimer = (data[2]) | (data[1] << 8);
-    uint16_t localLength = (data[4]) | (data[3] << 8);
+    uint16_t localTimer = (data[1]) | (data[2] << 8);
+    uint16_t localLength = (data[3]) | (data[4] << 8);
 
     String localTitle = "";
     String localArtist = "";
@@ -199,7 +204,10 @@ void handleSettingsCallback(const uint8_t* data, uint8_t size){
             D_printf(" UINT32 Battery INTERVAL: %i", (data[16] << 24) | (data[15] << 16) | (data[14] << 8) | data[13]);
             D_printf(" UINT8 Low Battery Threshold Phone: %i", data[17]);
             D_printf(" UINT8 Low Battery Threshold Intercom: %i", data[18]);
-            D_printf(" UINT32 Notification INTERVAL: %i", (data[22] << 24) | (data[21] << 16) | (data[20] << 8) | data[19]);
+            D_printf(" UINT8 Warning Popup Duration: %i", data[19]);
+            D_printf(" UINT32 Notification INTERVAL: %i", (data[23] << 24) | (data[22] << 16) | (data[21] << 8) | data[20]);
+            float dbg_temp_cal; memcpy(&dbg_temp_cal, &data[24], sizeof(float));
+            D_printf(" FLOAT Temp Calibration: %f", dbg_temp_cal);
             D_flush();
             #pragma endregion
 
@@ -221,9 +229,10 @@ void handleSettingsCallback(const uint8_t* data, uint8_t size){
             sEEPROM.battery_icon_interval = (data[16] << 24) | (data[15] << 16) | (data[14] << 8) | data[13];
             sEEPROM.low_battery_threshold_phone = data[17];
             sEEPROM.low_battery_threshold_intercom = data[18];
-            sEEPROM.notification_interval = (data[22] << 24) | (data[21] << 16) | (data[20] << 8) | data[19];
-            // temp_calibration at bytes 23-26: not overwritten from BLE
-            // reserved bytes 27-34: not parsed
+            sEEPROM.warning_popup_duration = data[19];
+            sEEPROM.notification_interval = (data[23] << 24) | (data[22] << 16) | (data[21] << 8) | data[20];
+            memcpy(&sEEPROM.temp_calibration, &data[24], sizeof(float));
+            // reserved bytes 28-37: not parsed
             sEEPROM.crc = calc_crc();
             //EEPROM.put(0,sEEPROM);
             //EEPROM.commit();

@@ -333,7 +333,7 @@ void drawVolumePopup(){
     u8g2_current->setDrawColor(1);
     drawRFrame(popX, popY, popW, popH, 18);
 
-    u8g2_current->setFont(u8g2_font_profont17_tf);
+    u8g2_current->setFont(u8g2_font_helvR14_tr);
     if(volumeLevel == 0){
         drawStr(popX + popW/2 - u8g2_current->getStrWidth("Mute")/2, popY + 20, "Mute");
     } else {
@@ -488,69 +488,3 @@ void drawMusicUI(String title, String artist, int time, int song_length, bool pl
 }
 
 #pragma endregion
-
-
-
-#pragma region ICON_FRONT
-void drawSpeedSign(int16_t speed){
-  u8g2_current->setFont(u8g2_font_profont17_tr);
-  uint8_t x = 32;
-  uint8_t y = 56;
-  drawDisc(x, y, 20);
-  u8g2_current->setDrawColor(0);
-  drawDisc(x, y, 16);
-  u8g2_current->setDrawColor(1);
-  String s = String(speed);
-  if(speed > 0){
-    drawStr(x-u8g2_current->getStrWidth(String(speed).c_str())/2, y+u8g2_current->getMaxCharHeight()/3+1, String(speed).c_str());
-  }else if(speed == 0){
-    u8g2_0.drawLine(x-18/2-5, y+14/2, x+18/2+1, y-26/2);
-    u8g2_0.drawLine(x-18/2-3, y+20/2, x+18/2+3, y-20/2);
-    u8g2_0.drawLine(x-18/2-1, y+26/2, x+18/2+5, y-14/2);
-  }else{
-    drawStr(x-3, y+u8g2_current->getMaxCharHeight()/3+1, "?");
-  }
-}
-#pragma endregion
-
-
-
-void drawWeatherSymbol(u8g2_uint_t x, u8g2_uint_t y, uint8_t symbol)
-{
-  // fonts used:
-  // u8g2_font_open_iconic_embedded_6x_t
-  // u8g2_font_open_iconic_weather_6x_t
-  // encoding values, see: https://github.com/olikraus/u8g2/wiki/fntgrpiconic
-  
-  switch(symbol)
-  {
-    case SUN:
-      u8g2_0.setFont(u8g2_font_open_iconic_weather_1x_t);
-      u8g2_0.drawGlyph(x, y, 69);	
-      break;
-    case SUN_CLOUD:
-      u8g2_0.setFont(u8g2_font_open_iconic_weather_2x_t);
-      u8g2_0.drawGlyph(x, y, 12);	
-      break;
-    case CLOUD:
-      u8g2_0.setFont(u8g2_font_open_iconic_weather_6x_t);
-      u8g2_0.drawGlyph(x, y, 12);	
-      break;
-    case RAIN:
-      u8g2_0.setFont(u8g2_font_open_iconic_weather_6x_t);
-      u8g2_0.drawGlyph(x, y, 12);	
-      break;
-    case THUNDER:
-      u8g2_0.setFont(u8g2_font_open_iconic_embedded_6x_t);
-      u8g2_0.drawGlyph(x, y, 12);
-      break;      
-  }
-}
-void drawWeather(uint8_t symbol, int degree)
-{
-  drawWeatherSymbol(0, 48, symbol);
-  u8g2_0.setFont(u8g2_font_logisoso32_tf);
-  u8g2_0.setCursor(48+3, 42);
-  u8g2_0.print(degree);
-  u8g2_0.print("°C");		// requires enableUTF8Print()
-}

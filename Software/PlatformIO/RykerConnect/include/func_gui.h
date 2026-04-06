@@ -25,6 +25,3 @@ String strTime(int seconds);
 String getScrollString(uint8_t pos, String value, bool *en, uint8_t *i, unsigned short *interval);
 
 void drawMusicUI(String title, String artist, int time, int song_length, bool playstate, uint8_t screen = 0);
-void drawSpeedSign(int16_t speed);
-void drawWeatherSymbol(u8g2_uint_t x, u8g2_uint_t y, uint8_t symbol);
-void drawWeather(uint8_t symbol, int degree);

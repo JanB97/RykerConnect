@@ -198,57 +198,23 @@ void setupBLEServer()
     /** Optional: set the transmit power in dBm */
     NimBLEDevice::setPower(9); /** +9db */
 
-    // region HID Setup
-    /* HID */
+    // HID setup — registers HID service so phones show device as controller
     NimBLEHIDDevice *hid = new NimBLEHIDDevice(pServer);
-    // input = hid->inputReport(1); // <-- input REPORTID from report map
-    // output = hid->outputReport(1); // <-- output REPORTID from report map
-
-    // output->setCallbacks(new MyCharCallbacks());
-
     hid->setManufacturer("Jan Boerschlein");
-
-    //hid->pnp(0x02, 0xe502, 0xa111, 0x0210);
     hid->setPnp(0x00, 0x00, 0x0100, (VERSION << 8) | ((VERSION >> 8) & 0xFF));
     hid->setHidInfo(0x00, 0x02);
-
     static const uint8_t report[] = {
-        USAGE_PAGE(1), 0x01, // Generic Desktop Ctrls
-        USAGE(1), 0x02,      // Keyboard
-        COLLECTION(1), 0x01, // Application
-        REPORT_ID(1), 0x01,  //   Report ID (1)
-        USAGE_PAGE(1), 0x09, //   Kbrd/Keypad
-        USAGE_MINIMUM(1), 0xE0,
-        USAGE_MAXIMUM(1), 0xE7,
-        LOGICAL_MINIMUM(1), 0x00,
-        LOGICAL_MAXIMUM(1), 0x01,
-        REPORT_SIZE(1), 0x01, //   1 byte (Modifier)
-        REPORT_COUNT(1), 0x08,
-        HIDINPUT(1), 0x02,     //   Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position
-        REPORT_COUNT(1), 0x01, //   1 byte (Reserved)
-        REPORT_SIZE(1), 0x08,
-        HIDINPUT(1), 0x01,     //   Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position
-        REPORT_COUNT(1), 0x06, //   6 bytes (Keys)
-        REPORT_SIZE(1), 0x08,
-        LOGICAL_MINIMUM(1), 0x00,
-        LOGICAL_MAXIMUM(1), 0x65, //   101 keys
-        USAGE_MINIMUM(1), 0x00,
-        USAGE_MAXIMUM(1), 0x65,
-        HIDINPUT(1), 0x00,     //   Data,Array,Abs,No Wrap,Linear,Preferred State,No Null Position
-        REPORT_COUNT(1), 0x05, //   5 bits (Num lock, Caps lock, Scroll lock, Compose, Kana)
-        REPORT_SIZE(1), 0x01,
-        USAGE_PAGE(1), 0x08,    //   LEDs
-        USAGE_MINIMUM(1), 0x01, //   Num Lock
-        USAGE_MAXIMUM(1), 0x05, //   Kana
-        HIDOUTPUT(1), 0x02,     //   Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile
-        REPORT_COUNT(1), 0x01,  //   3 bits (Padding)
-        REPORT_SIZE(1), 0x03,
-        HIDOUTPUT(1), 0x01, //   Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile
-        END_COLLECTION(0)};
+        USAGE_PAGE(1), 0x01, USAGE(1), 0x05, COLLECTION(1), 0x01,
+        REPORT_ID(1), 0x01,
+        USAGE_PAGE(1), 0x09, USAGE_MINIMUM(1), 0x01, USAGE_MAXIMUM(1), 0x01,
+        LOGICAL_MINIMUM(1), 0x00, LOGICAL_MAXIMUM(1), 0x01,
+        REPORT_COUNT(1), 0x01, REPORT_SIZE(1), 0x01,
+        HIDINPUT(1), 0x02,
+        REPORT_COUNT(1), 0x01, REPORT_SIZE(1), 0x07,
+        HIDINPUT(1), 0x01,
+        END_COLLECTION(0)
+    };
     hid->setReportMap((uint8_t *)report, sizeof(report));
-
-    /**/
-    // endregion
 
     NimBLEService *pService = pServer->createService(SERVICE_UUID);
 
@@ -267,7 +233,7 @@ void setupBLEServer()
     NimBLECharacteristic *displayReinitCharacteristic = pService->createCharacteristic(DISPLAY_REINIT_UUID, NIMBLE_PROPERTY::WRITE);
     NimBLECharacteristic *firmwareVersionCharacteristic = pService->createCharacteristic(FIRMWARE_VERSION_UUID, NIMBLE_PROPERTY::READ);
     NimBLECharacteristic *hardwareVersionCharacteristic = pService->createCharacteristic(HARDWARE_VERSION_UUID, NIMBLE_PROPERTY::READ);
-    NimBLECharacteristic *volumeCharacteristic = pService->createCharacteristic(VOLUME_UUID, NIMBLE_PROPERTY::WRITE);
+    NimBLECharacteristic *volumeCharacteristic = pService->createCharacteristic(VOLUME_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
 
     static BLECharCallbacks charCallbacks;
     timeCharacteristic->setCallbacks(&charCallbacks);

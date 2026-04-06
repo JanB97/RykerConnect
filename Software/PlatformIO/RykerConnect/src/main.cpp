@@ -4,26 +4,33 @@
 #include <esp_task_wdt.h>
 #include <SPI.h>
 #include <WiFi.h>
-#include <WiFiClient.h>
-#include <WebServer.h>
+#include <WiFiClientSecure.h>
 #include <Update.h>
 #include <ESPmDNS.h>
-#include <HTTPClient.h>
-#include <WiFiClientSecure.h>
 #include <Wire.h>
 #include "mcp9808.h"
 
 
-WebServer server(80);
+WiFiServer server(80);
 
-const char* serverIndex = PROGMEM{R"rawliteral(<head><title>RykerConnect OTA-Update</title><style>table{border:1px;border-radius:24px;padding:16px;box-shadow:3px 2px 2px 0 rgba(50,50,50,.25)}td,th{padding:6px}input{padding:6px;border-radius:8px;border-color:#c9c9c9}</style></head><body style="font-family:Courier New,Courier,Arial"><form method="POST" action="#" enctype="multipart/form-data" id="upload_form"><table bgcolor="D9D9D9" align="center"><tr><td><center><font size="5"><b>RykerConnect OTA-Update</b></font></center><br></td><br><br></tr><tr><td style="padding-top:6px"><font size="5"><input type="file" name="update"></font></td></tr><br><br><tr><td style="padding-top:12px;padding-bottom:2px"><progress style="width:100%;height:24px" id="prg" max="100" value="0"></progress></td></tr><tr><td><font size="5"><input style="width:100%" type="submit" value="Update"></font></td></tr><tr><td><font size="3">Version: %PLACEHOLDER_VERSION%</font></td><br><br></tr></table></form><script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script><script>$("form").submit(function(e){e.preventDefault();var t=$("#upload_form")[0],n=new FormData(t);$.ajax({url:"/update",type:"POST",data:n,contentType:!1,processData:!1,xhr:function(){var e=new window.XMLHttpRequest;return e.upload.addEventListener("progress",function(e){if(e.lengthComputable){var t=e.loaded/e.total;document.getElementById("prg").value=Math.round(100*t)}},!1),e},success:function(e,t){console.log("success!")},error:function(e,t,n){}})})</script></body>)rawliteral"};
+static const char otaPage[] PROGMEM =
+  "<!DOCTYPE html><html><body>"
+  "<h2>RykerConnect OTA</h2>"
+  "<input type=file id=f><button onclick=u()>Update</button><br>"
+  "<progress id=p max=100 value=0></progress> <span id=s></span>"
+  "<script>function u(){var f=document.getElementById('f').files[0];"
+  "if(!f)return;var x=new XMLHttpRequest();x.open('POST','/update');"
+  "x.upload.onprogress=function(e){if(e.lengthComputable)"
+  "document.getElementById('p').value=Math.round(100*e.loaded/e.total)};"
+  "x.onload=function(){document.getElementById('s').textContent="
+  "x.status==200?'OK, Rebooting...':'FAILED'};"
+  "x.send(f)}</script></body></html>";
 bool is_server_first_loop = true;
-void setupWebServer();
+void handleOTAClient();
 
 bool downloadAndFlashFirmware(const String& url) {
     D_printf("[OTA] Starting download from: %s", url.c_str());
 
-    // Ensure both displays show the OTA popup (with IP address) before starting
     setLeftSide();
     u8g2_current->clearBuffer();
     drawFullClock();
@@ -34,44 +41,76 @@ bool downloadAndFlashFirmware(const String& url) {
     drawFullTemperature();
     drawOTAPopup();
     u8g2_current->sendBuffer();
+
+    // Parse URL: http(s)://host:port/path
+    String urlStr = url;
+    bool useHttps = urlStr.startsWith("https://");
+    if(useHttps) urlStr = urlStr.substring(8);
+    else if(urlStr.startsWith("http://")) urlStr = urlStr.substring(7);
+
+    String host;
+    uint16_t port = useHttps ? 443 : 80;
+    String path = "/";
+    int pathStart = urlStr.indexOf('/');
+    if(pathStart > 0) {
+        path = urlStr.substring(pathStart);
+        urlStr = urlStr.substring(0, pathStart);
+    }
+    int colonPos = urlStr.indexOf(':');
+    if(colonPos > 0) {
+        port = urlStr.substring(colonPos + 1).toInt();
+        host = urlStr.substring(0, colonPos);
+    } else {
+        host = urlStr;
+    }
+
+    D_printf("[OTA] Host: %s, Port: %d, Path: %s (HTTPS: %d)", host.c_str(), port, path.c_str(), useHttps);
 
     WiFiClientSecure secureClient;
-    secureClient.setInsecure();
-    D_println("[OTA] WiFiClientSecure created, setInsecure() done");
-    
-    HTTPClient http;
-    http.begin(secureClient, url);
-    http.setTimeout(30000);
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
-    D_println("[OTA] HTTPClient configured, sending GET...");
-    
-    int httpCode = http.GET();
-    D_printf("[OTA] HTTP response code: %d", httpCode);
-    
-    if (httpCode != HTTP_CODE_OK) {
-        D_printf("[OTA] HTTP GET failed, code: %d", httpCode);
-        http.end();
+    WiFiClient plainClient;
+    Client* clientPtr;
+    if(useHttps) {
+        secureClient.setInsecure(); // skip cert check — acceptable for OTA on embedded device
+        clientPtr = &secureClient;
+    } else {
+        clientPtr = &plainClient;
+    }
+    clientPtr->setTimeout(30);
+    if(!clientPtr->connect(host.c_str(), port)) {
+        D_println("[OTA] Connection failed");
         return false;
     }
-    int contentLength = http.getSize();
-    D_printf("[OTA] Content-Length: %d", contentLength);
-    
-    if (contentLength <= 0) {
-        D_println("[OTA] Invalid content length, trying chunked download");
-        contentLength = UPDATE_SIZE_UNKNOWN;
+
+    clientPtr->printf("GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", path.c_str(), host.c_str());
+
+    // Read HTTP response headers
+    int contentLength = -1;
+    int httpCode = 0;
+    unsigned long headerTimeout = millis();
+    while(clientPtr->connected() && millis() - headerTimeout < 10000) {
+        if(!clientPtr->available()) { delay(1); continue; }
+        String line = clientPtr->readStringUntil('\n');
+        line.trim();
+        if(line.startsWith("HTTP/")) httpCode = line.substring(9, 12).toInt();
+        if(line.startsWith("Content-Length:")) contentLength = line.substring(16).toInt();
+        if(line.length() == 0) break;
     }
-    
-    D_printf("[OTA] Starting Update.begin(%d)", contentLength);
-    if (!Update.begin(contentLength)) {
+
+    if(httpCode != 200) {
+        D_printf("[OTA] HTTP error: %d", httpCode);
+        clientPtr->stop();
+        return false;
+    }
+
+    int updateSize = contentLength > 0 ? contentLength : UPDATE_SIZE_UNKNOWN;
+    if(!Update.begin(updateSize)) {
         D_println("[OTA] Not enough space for OTA");
         Update.printError(Serial);
-        http.end();
+        clientPtr->stop();
         return false;
     }
-    D_println("[OTA] Update.begin() OK, starting download...");
+
     otaDownloadPercent = 0;
-    
-    // Draw 0% progress immediately so the user sees the bar before data starts flowing
     setLeftSide();
     u8g2_current->clearBuffer();
     drawFullClock();
@@ -83,33 +122,26 @@ bool downloadAndFlashFirmware(const String& url) {
     drawOTAPopup();
     u8g2_current->sendBuffer();
 
-    WiFiClient* stream = http.getStreamPtr();
     uint8_t buf[1024];
     int written = 0;
-    unsigned long lastProgressLog = 0;
     unsigned long lastDisplayUpdate = millis();
     int8_t lastDisplayedPercent = 0;
-    while (http.connected() && (contentLength == UPDATE_SIZE_UNKNOWN || written < contentLength)) {
-        size_t available = stream->available();
-        if (available) {
-            int readBytes = stream->readBytes(buf, min(available, sizeof(buf)));
-            if (Update.write(buf, readBytes) != (size_t)readBytes) {
+    while(clientPtr->connected() || clientPtr->available()) {
+        size_t available = clientPtr->available();
+        if(available) {
+            int readBytes = clientPtr->readBytes(buf, min(available, sizeof(buf)));
+            if(Update.write(buf, readBytes) != (size_t)readBytes) {
                 D_println("[OTA] Write failed!");
                 Update.printError(Serial);
                 otaDownloadPercent = -1;
-                http.end();
+                clientPtr->stop();
                 return false;
             }
             written += readBytes;
-            if (contentLength > 0) {
+            if(contentLength > 0) {
                 otaDownloadPercent = (int8_t)((written * 100L) / contentLength);
             }
-            if (millis() - lastProgressLog > 1000) {
-                D_printf("[OTA] Progress: %d bytes written", written);
-                lastProgressLog = millis();
-            }
-            // Refresh display every 500ms or every 5% change
-            if (millis() - lastDisplayUpdate > 500 || otaDownloadPercent - lastDisplayedPercent >= 5) {
+            if(millis() - lastDisplayUpdate > 500 || otaDownloadPercent - lastDisplayedPercent >= 5) {
                 setLeftSide();
                 u8g2_current->clearBuffer();
                 drawFullClock();
@@ -128,8 +160,8 @@ bool downloadAndFlashFirmware(const String& url) {
         delay(1);
     }
     D_printf("[OTA] Download complete, %d bytes written", written);
-    http.end();
-    if (Update.end(true)) {
+    clientPtr->stop();
+    if(Update.end(true)) {
         otaDownloadPercent = 100;
         D_printf("[OTA] Success! %d bytes. Rebooting...", written);
         delay(500);
@@ -209,8 +241,6 @@ void setup() {
   esp_task_wdt_init(30, true);
   esp_task_wdt_add(NULL);
 
-  setupWebServer();
-
   srand(millis());
   resetPin = 1000 + (rand() % 9999);
 
@@ -274,43 +304,71 @@ void loop() {
           server.begin();
           is_server_first_loop = false;
         }
-        server.handleClient();
+        handleOTAClient();
     }
   }
 
 }
 
 
-void setupWebServer(){
-  server.on("/", HTTP_GET, []() {
-    String serverT = serverIndex;
-    serverT.replace("%PLACEHOLDER_VERSION%", String(VERSION));
-    server.sendHeader("Connection", "close");
-    server.send(200, "text/html", serverT);
-  });
-  /*handling uploading firmware file */
-  server.on("/update", HTTP_POST, []() {
-    server.sendHeader("Connection", "close");
-    server.send(200, "text/plain", (Update.hasError()) ? "FAIL" : "OK");
-    ESP.restart();
-  }, []() {
-    HTTPUpload& upload = server.upload();
-    if (upload.status == UPLOAD_FILE_START) {
-      D_printf("Update: %s\n", upload.filename.c_str());
-      if (!Update.begin(UPDATE_SIZE_UNKNOWN)) { //start with max available size
-        Update.printError(Serial);
-      }
-    } else if (upload.status == UPLOAD_FILE_WRITE) {
-      /* flashing firmware to ESP*/
-      if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
-        Update.printError(Serial);
-      }
-    } else if (upload.status == UPLOAD_FILE_END) {
-      if (Update.end(true)) { //true to set the size to the current progress
-        D_printf("Update Success: %u\nRebooting...\n", upload.totalSize);
-      } else {
-        Update.printError(Serial);
-      }
+void handleOTAClient(){
+    WiFiClient client = server.available();
+    if(!client) return;
+
+    unsigned long timeout = millis();
+    while(!client.available() && millis() - timeout < 3000) delay(1);
+    if(!client.available()) { client.stop(); return; }
+
+    String requestLine = client.readStringUntil('\n');
+    requestLine.trim();
+    int contentLength = 0;
+    while(client.available()) {
+        String header = client.readStringUntil('\n');
+        header.trim();
+        if(header.length() == 0) break;
+        if(header.startsWith("Content-Length:")) contentLength = header.substring(16).toInt();
     }
-  });
+
+    if(requestLine.startsWith("GET / ")) {
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-Type: text/html");
+        client.println("Connection: close");
+        client.println();
+        client.print(otaPage);
+    } else if(requestLine.startsWith("POST /update")) {
+        bool success = false;
+        if(contentLength > 0 && Update.begin(contentLength)) {
+            uint8_t buf[1024];
+            int written = 0;
+            while(written < contentLength) {
+                if(client.available()) {
+                    int toRead = min((int)sizeof(buf), contentLength - written);
+                    int readBytes = client.readBytes(buf, toRead);
+                    if(Update.write(buf, readBytes) != (size_t)readBytes) break;
+                    written += readBytes;
+                    esp_task_wdt_reset();
+                } else if(!client.connected()) {
+                    break;
+                } else {
+                    delay(1);
+                }
+            }
+            success = Update.end(true);
+        }
+        client.println("HTTP/1.1 200 OK");
+        client.println("Connection: close");
+        client.println();
+        client.println(success ? "OK" : "FAIL");
+        client.stop();
+        if(success) {
+            D_println("[OTA] Browser upload success, rebooting...");
+            delay(500);
+            ESP.restart();
+        }
+    } else {
+        client.println("HTTP/1.1 404 Not Found");
+        client.println("Connection: close");
+        client.println();
+    }
+    client.stop();
 }

@@ -8,11 +8,11 @@
 #include <mcp9808.h>
 #include <freertos/semphr.h>
 
-#define DEBUG
+//#define DEBUG
 #define SPLASHSCREEN
 
 #define VERSION 0x0006
-#define HARDWARE_VERSION "REV01"
+#define HARDWARE_VERSION "ESP32S3-REV01"
 
 #define OLED_WIDTH 320
 #define OLED_HEIGHT 132
@@ -149,6 +149,8 @@ extern unsigned short scrollArtistInterval;
 #define LOW_BATTERY_THRESHOLD_INTERCOM_DEFAULT 20
 #define AUTO_BRIGHTNESS_ADC_LOW_DEFAULT         200
 #define AUTO_BRIGHTNESS_ADC_HIGH_DEFAULT        3500
+#define WARNING_POPUP_DURATION_DEFAULT          5
+#define VOLUME_POPUP_DURATION_DEFAULT           3
 
 extern Preferences prefs;
 extern struct EEPROM_Struct{
@@ -167,11 +169,12 @@ extern struct EEPROM_Struct{
     // Low battery warning
     uint8_t     low_battery_threshold_phone;
     uint8_t     low_battery_threshold_intercom;
+    uint8_t     warning_popup_duration;  // seconds, for all warning popups
     // Other
     uint32_t    notification_interval;
     float       temp_calibration; // degrees to subtract from sensor reading
     // Reserved for future use
-    uint8_t     reserved[8];
+    uint8_t     reserved[10];
     uint32_t    crc;
 }__attribute__((packed)) sEEPROM;
 
@@ -179,7 +182,6 @@ extern struct EEPROM_Struct{
 #pragma endregion
 
 #pragma region Volume Variables
-#define VOLUME_POPUP_INTERVAL 2000
 extern uint8_t volumeLevel;
 extern bool volumeDisplayed;
 extern unsigned long previousVolumeMillis;
@@ -187,7 +189,7 @@ extern unsigned long previousVolumeMillis;
 
 #pragma region Auto-Brightness
 #define AUTO_BRIGHTNESS_INTERVAL 100
-#define AUTO_BRIGHTNESS_MIN 10
+#define AUTO_BRIGHTNESS_MIN 25
 #define AUTO_BRIGHTNESS_MAX 255
 extern unsigned long previousAutoBrightnessMillis;
 extern float smoothedLightLevel;
@@ -199,10 +201,11 @@ extern unsigned long lastBLEActivityMillis;
 #pragma endregion
 
 #pragma region Low Battery Warning
-#define LOW_BATTERY_POPUP_INTERVAL 5000
 extern bool lowBatteryDisplayed;
 extern unsigned long previousLowBatteryMillis;
 extern String lowBatteryText;
+extern bool lowBatteryTriggeredPhone;
+extern bool lowBatteryTriggeredIntercom;
 #pragma endregion
 
 #pragma region DEBUG CODE

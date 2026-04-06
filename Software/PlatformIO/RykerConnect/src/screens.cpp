@@ -117,9 +117,9 @@ void drawPopups(){
     }
     drawNotificationPopup(localType, localTitle, localText);
   }
+  drawVolumePopup();
+  drawLowBatteryPopup();
   drawOTAPopup();
   drawResetPopup();
   drawPairingPopup();
-  drawLowBatteryPopup();
-  drawVolumePopup();
 }

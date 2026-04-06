@@ -1,0 +1,12 @@
+# Total Flash: 0x800000 (8 MB)
+
+# Boot + System
+nvs,      data, nvs,     0x9000,   0x5000     # 20 KB
+otadata,  data, ota,     0xe000,   0x2000     # 8 KB
+
+# OTA Slots
+ota_0,    app,  ota_0,   0x10000,  0x380000   # 3.5 MB
+ota_1,    app,  ota_1,   0x390000, 0x380000   # 3.5 MB
+
+# SPIFFS (≈ 896 KB)
+spiffs,   data, spiffs,  0x710000, 0x0E0000   # 896 KB

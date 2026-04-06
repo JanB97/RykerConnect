@@ -81,12 +81,16 @@ void runTimers(){
   }
 
   // Volume popup auto-dismiss
-  if(volumeDisplayed && currentMillis - previousVolumeMillis >= VOLUME_POPUP_INTERVAL){
+  if(volumeDisplayed && currentMillis - previousVolumeMillis >= (unsigned long)VOLUME_POPUP_DURATION_DEFAULT * 1000UL){
       volumeDisplayed = false;
   }
 
+  // Popup auto-dismiss (configurable duration for all warning popups)
+  unsigned long popupDurationMs = (unsigned long)sEEPROM.warning_popup_duration * 1000UL;
+  if(popupDurationMs == 0) popupDurationMs = 1000;
+
   // Low battery popup auto-dismiss
-  if(lowBatteryDisplayed && currentMillis - previousLowBatteryMillis >= LOW_BATTERY_POPUP_INTERVAL){
+  if(lowBatteryDisplayed && currentMillis - previousLowBatteryMillis >= popupDurationMs){
       lowBatteryDisplayed = false;
   }
 
@@ -155,6 +159,7 @@ void reset_settings(){
     sEEPROM.temp_calibration = 0.0;
     sEEPROM.low_battery_threshold_phone = LOW_BATTERY_THRESHOLD_PHONE_DEFAULT;
     sEEPROM.low_battery_threshold_intercom = LOW_BATTERY_THRESHOLD_INTERCOM_DEFAULT;
+    sEEPROM.warning_popup_duration = WARNING_POPUP_DURATION_DEFAULT;
     sEEPROM.auto_brightness_adc_low = AUTO_BRIGHTNESS_ADC_LOW_DEFAULT;
     sEEPROM.auto_brightness_adc_high = AUTO_BRIGHTNESS_ADC_HIGH_DEFAULT;
     memset(sEEPROM.reserved, 0, sizeof(sEEPROM.reserved));
