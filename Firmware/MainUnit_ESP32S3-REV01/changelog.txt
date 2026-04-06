@@ -1,3 +1,16 @@
+V00.06 (06.04.2026):
+- optimize firmware size
+- add volume popup
+- add low battery warnings
+- add auto brightness
+- limit min brightness to 25
+- add temp calibration (offset)
+- change settings size to fit new options + reserves (Warning: settings will be erased)
+- add BLE Watchdog
+Warning: you will need to use Android App Version 1.3 minimum for this version!
+This version will most likely be used as V1.0 after testing - but will use a different partition table for future proofing.
+It will need flashing with USB after promotion.
+
 V00.05 (05.04.2026):
 - fix hostname no longer beeing advertised
 
