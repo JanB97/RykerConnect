@@ -49,6 +49,9 @@ class NotificationListener : NotificationListenerService() {
 
                 serviceScope.launch {
                     try {
+                        // Check if notifications forwarding is enabled
+                        if (!store.isNotificationsEnabled()) return@launch
+
                         val packageManager = applicationContext.packageManager
                         val appInfo = packageManager.getApplicationInfo(strApp, PackageManager.GET_META_DATA)
                         val appName = packageManager.getApplicationLabel(appInfo).toString()

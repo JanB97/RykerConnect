@@ -120,30 +120,36 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
     var installedFwVersion by remember { mutableStateOf<String?>(null) }
     var latestFwVersion by remember { mutableStateOf<String?>(null) }
     var allFwVersions by remember { mutableStateOf<List<String>>(emptyList()) }
+    // Hardware revision from ESP
+    var hardwareVersion by remember { mutableStateOf<String?>(null) }
 
-    // Read firmware version from ESP once services are discovered
+    // Read firmware + hardware version from ESP once services are discovered
     LaunchedEffect(activeConnection, bleServices) {
         if (activeConnection != null && bleServices.isNotEmpty()) {
             delay(200) // small buffer to ensure GATT is fully ready
             installedFwVersion = activeConnection?.readFirmwareVersion()
-            Log.d("HomeScreen", "Installed firmware version: $installedFwVersion")
+            hardwareVersion = activeConnection?.readHardwareVersion()
+            Log.d("HomeScreen", "Installed firmware: $installedFwVersion, HW: $hardwareVersion")
         } else {
             installedFwVersion = null
+            hardwareVersion = null
         }
     }
 
-    // Fetch latest available version from GitHub
-    LaunchedEffect(Unit) {
+    // Fetch latest available version from GitHub – re-run when hardware version becomes available
+    LaunchedEffect(hardwareVersion) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val fwFolder = de.chaostheorybot.rykerconnect.logic.firmwareFolderName(hardwareVersion)
             try {
                 val client = okhttp3.OkHttpClient()
-                val url = "https://api.github.com/repos/JanB97/RykerConnect/contents/Firmware/MainUnit_ESP32S3-REV01?t=${System.currentTimeMillis()}"
+                val url = "https://api.github.com/repos/JanB97/RykerConnect/contents/Firmware/$fwFolder?t=${System.currentTimeMillis()}"
                 val request = okhttp3.Request.Builder()
                     .url(url)
                     .header("Accept", "application/vnd.github+json")
                     .header("User-Agent", "RykerConnect-App")
                     .build()
                 val response = client.newCall(request).execute()
+                var success = false
                 response.use { resp ->
                     if (resp.isSuccessful) {
                         val body = resp.body?.string()
@@ -158,6 +164,34 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                                 val sorted = list.sortedDescending()
                                 allFwVersions = sorted
                                 latestFwVersion = sorted.first()
+                                success = true
+                            }
+                        }
+                    }
+                }
+                // Fallback to default folder if dynamic one failed
+                if (!success && fwFolder != de.chaostheorybot.rykerconnect.logic.FALLBACK_FIRMWARE_FOLDER) {
+                    val fbUrl = "https://api.github.com/repos/JanB97/RykerConnect/contents/Firmware/${de.chaostheorybot.rykerconnect.logic.FALLBACK_FIRMWARE_FOLDER}?t=${System.currentTimeMillis()}"
+                    val fbReq = okhttp3.Request.Builder().url(fbUrl)
+                        .header("Accept", "application/vnd.github+json")
+                        .header("User-Agent", "RykerConnect-App")
+                        .build()
+                    val fbResp = client.newCall(fbReq).execute()
+                    fbResp.use { resp ->
+                        if (resp.isSuccessful) {
+                            val body = resp.body?.string()
+                            if (body != null) {
+                                val json = org.json.JSONArray(body)
+                                val list = mutableListOf<String>()
+                                for (i in 0 until json.length()) {
+                                    val name = json.getJSONObject(i).getString("name")
+                                    if (name.startsWith("V", ignoreCase = true)) list.add(name)
+                                }
+                                if (list.isNotEmpty()) {
+                                    val sorted = list.sortedDescending()
+                                    allFwVersions = sorted
+                                    latestFwVersion = sorted.first()
+                                }
                             }
                         }
                     }

@@ -10,6 +10,7 @@ import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothStatusCodes
 import android.content.Context
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
@@ -25,7 +26,6 @@ import java.util.UUID
 
 
 val RC_SERVICE_UUID: UUID = UUID.fromString("db7ba582-229a-4b96-9000-cf0f69f86f73")
-val SETTINGS_UUID: UUID = UUID.fromString("a41dcc81-d45e-4445-99bb-38c37c1ef1c8")
 val NOTIFICATION_UUID: UUID = UUID.fromString("755cf5b1-ded3-4c7b-a6fc-8c5ce2f99fdb")
 val MEDIA_DATA_UUID: UUID = UUID.fromString("dcadc0d8-24ed-40ed-952b-5d1c872a69aa")
 val PHONE_BATTERY_UUID: UUID = UUID.fromString("1f74ccf5-376a-40b6-ab60-7b1c5efbf652")
@@ -38,6 +38,21 @@ val DISPLAY_BRIGHTNESS_UUID: UUID = UUID.fromString("7bc28f30-10bc-46e2-b84b-96e
 val ESP_SETTINGS_UUID: UUID = UUID.fromString("05f7c3e4-daac-4953-8c71-20eacdf0c7a1")
 val DISPLAY_REINIT_UUID: UUID = UUID.fromString("3a6e4b2c-8f71-4d09-b5a3-c7e2f1d08a94")
 val FIRMWARE_VERSION_UUID: UUID = UUID.fromString("fb2385da-5290-4513-bb0c-6d0b21de619a")
+val HARDWARE_VERSION_UUID: UUID = UUID.fromString("3ae9aece-1b67-4281-a53b-748adf23f484")
+val VOLUME_UUID: UUID = UUID.fromString("c4e83b7d-5a12-4f8e-b9d6-3e7f1c2a4b8d")
+val SCREEN_SELECTION_UUID: UUID = UUID.fromString("62dbb02d-4a3a-452e-b753-02bcb2272b9d")
+
+/** Default firmware folder when hardware version cannot be read */
+const val FALLBACK_FIRMWARE_FOLDER = "MainUnit_ESP32S3-REV01"
+
+/**
+ * Build the firmware folder name from the hardware version string.
+ * E.g. "ESP32S3-REV01" → "MainUnit_ESP32S3-REV01"
+ */
+fun firmwareFolderName(hwVersion: String?): String {
+    if (hwVersion.isNullOrBlank()) return FALLBACK_FIRMWARE_FOLDER
+    return "MainUnit_$hwVersion"
+}
 
 @SuppressLint("MissingPermission") // Permission wird an allen Aufrufstellen via PermissionUtils geprüft
 class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT) constructor(
@@ -49,10 +64,23 @@ class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONN
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val operationMutex = Mutex()
+    /** Separate fast-lane mutex for volume – never queues behind main writes. */
+    private val volumeMutex = Mutex()
+    /** Latest volume value requested; stale queued writes skip themselves. */
+    @Volatile private var latestVolumePercent: Int = -1
+
     private var pendingWrite: CompletableDeferred<Int>? = null
     private var pendingRead: CompletableDeferred<ByteArray?>? = null
 
     private val charCache = mutableMapOf<UUID, BluetoothGattCharacteristic>()
+
+    /**
+     * Monotonic timestamp (ms) of the last successful BLE write.
+     * Used by the watchdog ping to avoid ESP-side idle disconnect (10 min).
+     */
+    @Volatile
+    var lastWriteTimestamp: Long = SystemClock.elapsedRealtime()
+        private set
 
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
@@ -122,8 +150,17 @@ class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONN
 
     private fun getCharacteristic(uuid: UUID): BluetoothGattCharacteristic? {
         charCache[uuid]?.let { return it }
-        val service = gatt?.getService(RC_SERVICE_UUID)
-        val characteristic = service?.getCharacteristic(uuid)
+        // Primary lookup in the RC service
+        var characteristic = gatt?.getService(RC_SERVICE_UUID)?.getCharacteristic(uuid)
+        // Fallback: search all discovered services (e.g. Volume may live in a different service)
+        if (characteristic == null) {
+            characteristic = gatt?.services
+                ?.flatMap { it.characteristics }
+                ?.find { it.uuid == uuid }
+            if (characteristic != null) {
+                Log.d("BLE", "getCharacteristic: $uuid found in service ${characteristic.service?.uuid} (fallback search)")
+            }
+        }
         if (characteristic != null) {
             charCache[uuid] = characteristic
         }
@@ -167,23 +204,47 @@ class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONN
     private fun writeCharacteristics(uuid: UUID, data: ByteArray, noResponse: Boolean = false) {
         scope.launch {
             operationMutex.withLock {
-                val characteristic = getCharacteristic(uuid) ?: return@withLock
-                
-                val writeType = if (noResponse) 
-                    BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE 
-                else 
+                val characteristic = getCharacteristic(uuid)
+                if (characteristic == null) {
+                    Log.w("BLE", "writeCharacteristics: characteristic NOT FOUND for UUID=$uuid")
+                    return@withLock
+                }
+
+                // Determine write type based on noResponse flag AND actual characteristic properties.
+                // If the characteristic supports only WRITE_WITHOUT_RESPONSE, force noResponse=true
+                // regardless of what was requested (prevents silent failures on API 33+).
+                val supportsWriteNoResp = (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE) != 0
+                val supportsWrite       = (characteristic.properties and BluetoothGattCharacteristic.PROPERTY_WRITE) != 0
+                val effectiveNoResponse = when {
+                    supportsWrite       -> noResponse      // prefer caller's intent when full WRITE supported
+                    supportsWriteNoResp -> true             // fallback: force no-response
+                    else                -> noResponse
+                }
+
+                val writeType = if (effectiveNoResponse)
+                    BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                else
                     BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+
+                Log.d("BLE", "write uuid=$uuid noResp=$effectiveNoResponse props=0x${characteristic.properties.toString(16)}")
 
                 var success = false
                 var count = 0
                 while (count < 2 && !success) {
-                    if (!isConnected.value || gatt == null) break
+                    if (!isConnected.value || gatt == null) {
+                        Log.w("BLE", "write aborted: not connected (uuid=$uuid)")
+                        break
+                    }
 
                     val deferred = CompletableDeferred<Int>()
-                    if (!noResponse) pendingWrite = deferred
+                    if (!effectiveNoResponse) pendingWrite = deferred
 
                     val initiated = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        gatt?.writeCharacteristic(characteristic, data, writeType) == BluetoothStatusCodes.SUCCESS
+                        val code = gatt?.writeCharacteristic(characteristic, data, writeType)
+                        if (code != BluetoothStatusCodes.SUCCESS) {
+                            Log.w("BLE", "writeCharacteristic returned code=$code for uuid=$uuid")
+                        }
+                        code == BluetoothStatusCodes.SUCCESS
                     } else {
                         @Suppress("DEPRECATION")
                         characteristic.value = data
@@ -193,21 +254,27 @@ class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONN
                     }
 
                     if (initiated) {
-                        if (noResponse) {
+                        lastWriteTimestamp = SystemClock.elapsedRealtime()
+                        if (effectiveNoResponse) {
                             success = true
-                            delay(20) 
+                            delay(20)
                         } else {
                             val status = withTimeoutOrNull(1000) { deferred.await() }
-                            if (status == BluetoothGatt.GATT_SUCCESS) success = true
+                            if (status == BluetoothGatt.GATT_SUCCESS) {
+                                success = true
+                            } else {
+                                Log.w("BLE", "write callback status=$status (timeout=${status == null}) uuid=$uuid")
+                            }
                         }
                     }
-                    
+
                     if (!success) {
                         count++
                         pendingWrite = null
                         delay(100)
                     }
                 }
+                if (!success) Log.e("BLE", "write FAILED after retries: uuid=$uuid")
             }
         }
     }
@@ -232,9 +299,9 @@ class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONN
     }
 
     fun writeMediaData(playstate: Boolean, position: Int, trackLength: Int, title: String?, artist: String?) {
-        // ZURÜCK AUF BIG ENDIAN (Android Default) für Musik-Header
+        // Little-endian für alle Multi-Byte Felder (kompatibel mit ESP)
         val header = ByteBuffer.allocate(5).apply {
-            order(ByteOrder.BIG_ENDIAN)
+            order(ByteOrder.LITTLE_ENDIAN)
             put(if (playstate) 0x01.toByte() else 0x00.toByte())
             putShort(position.toShort())
             putShort(trackLength.toShort())
@@ -277,7 +344,6 @@ class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONN
     }
 
     fun sendFactoryReset(pin: Int) {
-        // BLEIBT LITTLE ENDIAN wie angefordert
         val data = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(pin.toShort()).array()
         writeCharacteristics(FIRMWARE_RESET_UUID, data)
     }
@@ -325,6 +391,7 @@ class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONN
                 }
 
                 if (initiated) {
+                    lastWriteTimestamp = SystemClock.elapsedRealtime()
                     val status = withTimeoutOrNull(1000) { deferred.await() }
                     if (status == BluetoothGatt.GATT_SUCCESS) success = true
                 }
@@ -347,6 +414,62 @@ class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONN
         writeCharacteristics(DISPLAY_BRIGHTNESS_UUID, byteArrayOf(brightness.toByte()))
     }
 
+    /**
+     * High-priority volume write.
+     * - Dedicated [volumeMutex] – never queues behind time/battery/media writes.
+     * - [latestVolumePercent] ensures only the newest value is sent when writes
+     *   arrive faster than the BLE radio can process them.
+     * - Always uses WRITE_WITHOUT_RESPONSE (confirmed supported) – no ACK wait,
+     *   minimum possible latency (~20 ms BLE gap).
+     */
+    fun writeVolume(percent: Int) {
+        latestVolumePercent = percent
+        scope.launch {
+            volumeMutex.withLock {
+                val current = latestVolumePercent
+                if (current < 0) return@withLock
+                val characteristic = getCharacteristic(VOLUME_UUID) ?: run {
+                    Log.w("BLE", "writeVolume: characteristic not found")
+                    return@withLock
+                }
+                if (!isConnected.value || gatt == null) return@withLock
+
+                val data = byteArrayOf(current.coerceIn(0, 100).toByte())
+                val initiated = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    gatt?.writeCharacteristic(
+                        characteristic, data,
+                        BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                    ) == BluetoothStatusCodes.SUCCESS
+                } else {
+                    @Suppress("DEPRECATION")
+                    characteristic.value = data
+                    characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+                    @Suppress("DEPRECATION")
+                    gatt?.writeCharacteristic(characteristic) ?: false
+                }
+
+                if (initiated) {
+                    lastWriteTimestamp = SystemClock.elapsedRealtime()
+                    delay(20) // minimum BLE inter-write gap
+                } else {
+                    Log.w("BLE", "writeVolume: failed to initiate ($current%)")
+                }
+            }
+        }
+    }
+
+    /** Switch the active screen layout immediately. 0=Default, 1=Media, 2=Split */
+    fun writeScreenSelection(screen: Int) {
+        writeCharacteristics(SCREEN_SELECTION_UUID, byteArrayOf(screen.coerceIn(0, 2).toByte()))
+    }
+
+    /** Read the current screen index from the Screen Selection characteristic. */
+    suspend fun readScreenSelection(): Int? {
+        val data = readCharacteristicAsync(SCREEN_SELECTION_UUID) ?: return null
+        if (data.isEmpty()) return null
+        return data[0].toInt() and 0xFF
+    }
+
     suspend fun readFirmwareVersion(): String? {
         val data = readCharacteristicAsync(FIRMWARE_VERSION_UUID) ?: return null
         if (data.size < 2) return null
@@ -355,5 +478,10 @@ class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONN
         val major = (version shr 8) and 0xFF
         val minor = version and 0xFF
         return "V%02d.%02d".format(major, minor)
+    }
+
+    suspend fun readHardwareVersion(): String? {
+        val data = readCharacteristicAsync(HARDWARE_VERSION_UUID) ?: return null
+        return String(data, Charsets.UTF_8).trim().ifBlank { null }
     }
 }

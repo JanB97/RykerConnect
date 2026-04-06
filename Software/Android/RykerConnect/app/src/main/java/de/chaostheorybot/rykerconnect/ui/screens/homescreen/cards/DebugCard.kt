@@ -1,5 +1,6 @@
 package de.chaostheorybot.rykerconnect.ui.screens.homescreen.cards
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothManager
 import android.companion.CompanionDeviceManager
 import android.content.Context
@@ -19,6 +20,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +29,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import de.chaostheorybot.rykerconnect.logic.BLEDeviceConnection
@@ -127,7 +132,31 @@ fun DebugCard(title: String?,
                     }
 
                     HorizontalDivider()
-                    DebugManualOta(context = context, store = store)
+
+                    // Collapsible Manual BLE OTA section
+                    var otaExpanded by remember { mutableStateOf(false) }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { otaExpanded = !otaExpanded },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "Manual BLE OTA", style = MaterialTheme.typography.titleMedium)
+                        Icon(
+                            imageVector = if (otaExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (otaExpanded) "Collapse" else "Expand"
+                        )
+                    }
+                    AnimatedVisibility(
+                        visible = otaExpanded,
+                        enter = expandVertically(),
+                        exit = shrinkVertically()
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            DebugManualOta(context = context, store = store)
+                        }
+                    }
                 }
             }
         }
@@ -139,9 +168,21 @@ private fun DebugManualOta(context: Context, store: RykerConnectStore) {
     val scope = rememberCoroutineScope()
 
     var macAddress by remember { mutableStateOf("") }
+    var wifiSsid by remember { mutableStateOf("") }
+    var wifiPwd by remember { mutableStateOf("") }
+    var customUrl by remember { mutableStateOf("") }
+    var useCustomUrl by remember { mutableStateOf(false) }
+    var passwordVisible by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var isSuccess by remember { mutableStateOf(false) }
     var isRunning by remember { mutableStateOf(false) }
+
+    // Load stored credentials once
+    LaunchedEffect(Unit) {
+        val useHotspot = store.getFwUseHotspot.first()
+        wifiSsid = if (useHotspot) store.getFwHotspotSsid.first() else store.getFwWlanSsid.first()
+        wifiPwd = if (useHotspot) store.getFwHotspotPwd.first() else store.getFwWlanPwd.first()
+    }
 
     // Auto-hide feedback after 5 seconds
     LaunchedEffect(statusMessage) {
@@ -151,10 +192,9 @@ private fun DebugManualOta(context: Context, store: RykerConnectStore) {
         }
     }
 
-    Text("Manual BLE OTA", style = MaterialTheme.typography.titleMedium)
     Text(
         "Connect directly by MAC address and trigger OTA firmware update. " +
-                "Uses stored WiFi/Hotspot credentials and latest firmware version.",
+                "WiFi credentials and optionally a custom firmware URL can be provided below.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
@@ -168,10 +208,59 @@ private fun DebugManualOta(context: Context, store: RykerConnectStore) {
         modifier = Modifier.fillMaxWidth()
     )
 
+    OutlinedTextField(
+        value = wifiSsid,
+        onValueChange = { wifiSsid = it },
+        label = { Text("WiFi SSID") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    OutlinedTextField(
+        value = wifiPwd,
+        onValueChange = { wifiPwd = it },
+        label = { Text("WiFi Password") },
+        singleLine = true,
+        visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+        trailingIcon = {
+            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                Icon(
+                    imageVector = if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                    contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                )
+            }
+        },
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text("Custom URL", modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+        Switch(checked = useCustomUrl, onCheckedChange = { useCustomUrl = it })
+    }
+
+    if (useCustomUrl) {
+        OutlinedTextField(
+            value = customUrl,
+            onValueChange = { customUrl = it },
+            label = { Text("Firmware URL (.bin)") },
+            placeholder = { Text("https://example.com/firmware.bin") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+
     Button(
         onClick = {
             if (macAddress.isBlank()) {
                 statusMessage = "MAC address is empty"
+                isSuccess = false
+                return@Button
+            }
+            if (wifiSsid.isBlank()) {
+                statusMessage = "WiFi SSID is empty"
                 isSuccess = false
                 return@Button
             }
@@ -204,6 +293,7 @@ private fun DebugManualOta(context: Context, store: RykerConnectStore) {
                     withContext(Dispatchers.Main) { statusMessage = "Connecting to $macAddress..." }
 
                     // 2. Create BLEDeviceConnection and connect
+                    @SuppressLint("MissingPermission") // Permission checked above via PermissionUtils
                     val connection = BLEDeviceConnection(context.applicationContext, device)
                     RykerConnectApplication.activeConnection.value = connection
                     connection.connect()
@@ -225,68 +315,48 @@ private fun DebugManualOta(context: Context, store: RykerConnectStore) {
                         return@launch
                     }
 
-                    withContext(Dispatchers.Main) { statusMessage = "Connected! Reading firmware version..." }
+                    withContext(Dispatchers.Main) { statusMessage = "Connected! Reading device info..." }
 
-                    // 4. Read firmware version
+                    // 4. Read firmware & hardware version
                     val fwVersion = connection.readFirmwareVersion()
-                    Log.d("DebugOTA", "Installed firmware: $fwVersion")
+                    val hwVersion = connection.readHardwareVersion()
+                    Log.d("DebugOTA", "Installed firmware: $fwVersion, HW: $hwVersion")
 
-                    // 5. Fetch latest firmware version from GitHub
-                    withContext(Dispatchers.Main) { statusMessage = "Fetching latest firmware version..." }
-                    var latestVersion: String? = null
-                    try {
-                        val client = okhttp3.OkHttpClient()
-                        val url = "https://api.github.com/repos/JanB97/RykerConnect/contents/Firmware/MainUnit_ESP32S3-REV01?t=${System.currentTimeMillis()}"
-                        val request = okhttp3.Request.Builder()
-                            .url(url)
-                            .header("Accept", "application/vnd.github+json")
-                            .header("User-Agent", "RykerConnect-App")
-                            .build()
-                        val response = client.newCall(request).execute()
-                        response.use { resp ->
-                            if (resp.isSuccessful) {
-                                val body = resp.body.string()
-                                if (body != null) {
-                                    val json = org.json.JSONArray(body)
-                                    val list = mutableListOf<String>()
-                                    for (i in 0 until json.length()) {
-                                        val name = json.getJSONObject(i).getString("name")
-                                        if (name.startsWith("V", ignoreCase = true)) list.add(name)
-                                    }
-                                    if (list.isNotEmpty()) {
-                                        latestVersion = list.sortedDescending().first()
-                                    }
-                                }
-                            }
+                    val downloadUrl: String
+                    if (useCustomUrl && customUrl.isNotBlank()) {
+                        downloadUrl = customUrl
+                    } else {
+                        // 5. Resolve firmware folder from hardware version
+                        val fwFolder = de.chaostheorybot.rykerconnect.logic.firmwareFolderName(hwVersion)
+                        withContext(Dispatchers.Main) { statusMessage = "HW: ${hwVersion ?: "?"} → $fwFolder – Fetching versions..." }
+
+                        // 6. Fetch latest firmware version from GitHub
+                        var latestVersion: String? = null
+                        var folderUsed = fwFolder
+                        try {
+                            latestVersion = fetchLatestVersion(fwFolder)
+                        } catch (_: Exception) { }
+
+                        // Fallback to REV01 if dynamic folder fails
+                        if (latestVersion == null && fwFolder != de.chaostheorybot.rykerconnect.logic.FALLBACK_FIRMWARE_FOLDER) {
+                            withContext(Dispatchers.Main) { statusMessage = "Folder $fwFolder not found, trying fallback..." }
+                            folderUsed = de.chaostheorybot.rykerconnect.logic.FALLBACK_FIRMWARE_FOLDER
+                            try {
+                                latestVersion = fetchLatestVersion(folderUsed)
+                            } catch (_: Exception) { }
                         }
-                    } catch (e: Exception) {
-                        Log.e("DebugOTA", "Version fetch failed", e)
-                    }
 
-                    val targetVersion = latestVersion ?: store.getFwVersion.first()
-
-                    // 6. Get WiFi/Hotspot credentials
-                    val useHotspot = store.getFwUseHotspot.first()
-                    val ssid = if (useHotspot) store.getFwHotspotSsid.first() else store.getFwWlanSsid.first()
-                    val pwd = if (useHotspot) store.getFwHotspotPwd.first() else store.getFwWlanPwd.first()
-
-                    if (ssid.isBlank()) {
-                        withContext(Dispatchers.Main) {
-                            statusMessage = "No WiFi/Hotspot credentials saved! Configure in Firmware Update screen first."
-                            isSuccess = false
-                            isRunning = false
-                        }
-                        return@launch
+                        val targetVersion = latestVersion ?: store.getFwVersion.first()
+                        downloadUrl = "https://github.com/JanB97/RykerConnect/raw/main/Firmware/$folderUsed/$targetVersion/firmware.bin"
                     }
 
                     // 7. Send OTA firmware update command
-                    val downloadUrl = "https://github.com/JanB97/RykerConnect/raw/main/Firmware/MainUnit_ESP32S3-REV01/${targetVersion}/firmware.bin"
-                    withContext(Dispatchers.Main) { statusMessage = "Sending OTA update ($targetVersion)..." }
+                    withContext(Dispatchers.Main) { statusMessage = "Sending OTA update..." }
 
-                    connection.sendFirmwareUpdate(ssid, pwd, downloadUrl)
+                    connection.sendFirmwareUpdate(wifiSsid, wifiPwd, downloadUrl)
 
                     withContext(Dispatchers.Main) {
-                        statusMessage = "OTA command sent! FW: ${fwVersion ?: "?"} → $targetVersion | SSID: $ssid"
+                        statusMessage = "OTA sent! FW: ${fwVersion ?: "?"} | HW: ${hwVersion ?: "?"} | URL: $downloadUrl"
                         isSuccess = true
                         isRunning = false
                     }
@@ -345,6 +415,31 @@ private fun DebugManualOta(context: Context, store: RykerConnectStore) {
                 style = MaterialTheme.typography.bodySmall
             )
         }
+    }
+}
+
+/**
+ * Fetch the latest firmware version name from GitHub for a given firmware folder.
+ */
+private fun fetchLatestVersion(folderName: String): String? {
+    val client = okhttp3.OkHttpClient()
+    val url = "https://api.github.com/repos/JanB97/RykerConnect/contents/Firmware/$folderName?t=${System.currentTimeMillis()}"
+    val request = okhttp3.Request.Builder()
+        .url(url)
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "RykerConnect-App")
+        .build()
+    val response = client.newCall(request).execute()
+    response.use { resp ->
+        if (!resp.isSuccessful) return null
+        val body = resp.body.string()
+        val json = org.json.JSONArray(body)
+        val list = mutableListOf<String>()
+        for (i in 0 until json.length()) {
+            val name = json.getJSONObject(i).getString("name")
+            if (name.startsWith("V", ignoreCase = true)) list.add(name)
+        }
+        return if (list.isNotEmpty()) list.sortedDescending().first() else null
     }
 }
 

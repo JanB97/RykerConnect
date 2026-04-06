@@ -15,7 +15,8 @@ class RykerConnectApplication: Application() {
         var networkSignal: Byte = -1
         var networkType: Byte = 0
         var intercomBattery: Byte = -1
-        
+        var volumePercent: Int = -1
+
         @Suppress("unused")
         val mainUnitConnected = MutableStateFlow<Boolean>(false)
     }

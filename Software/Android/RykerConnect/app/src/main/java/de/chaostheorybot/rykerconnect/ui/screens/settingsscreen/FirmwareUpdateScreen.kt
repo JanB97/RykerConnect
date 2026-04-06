@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
+import de.chaostheorybot.rykerconnect.logic.FALLBACK_FIRMWARE_FOLDER
+import de.chaostheorybot.rykerconnect.logic.firmwareFolderName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
@@ -91,6 +93,12 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
 
     // Installed firmware version from ESP
     var installedFwVersion by remember { mutableStateOf<String?>(null) }
+    // Hardware revision from ESP (e.g. "ESP32S3-REV01")
+    var hardwareVersion by remember { mutableStateOf<String?>(null) }
+    // Resolved firmware folder name
+    var fwFolder by remember { mutableStateOf(FALLBACK_FIRMWARE_FOLDER) }
+    // Warning if dynamic folder lookup failed and fallback was used
+    var hwFolderWarning by remember { mutableStateOf<String?>(null) }
 
     val activeConnection by RykerConnectApplication.activeConnection.collectAsState()
     val isBleConnected by (activeConnection?.isConnected ?: remember { kotlinx.coroutines.flow.MutableStateFlow(false) }).collectAsState()
@@ -98,19 +106,23 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
     // Tab state: 0 = Hotspot, 1 = WiFi
     val selectedTab = if (useHotspot.value) 0 else 1
 
-    // Read installed firmware version from ESP
+    // Read installed firmware + hardware version from ESP
     LaunchedEffect(activeConnection, isBleConnected) {
         if (isBleConnected && activeConnection != null) {
             installedFwVersion = activeConnection?.readFirmwareVersion()
+            hardwareVersion = activeConnection?.readHardwareVersion()
+            fwFolder = firmwareFolderName(hardwareVersion)
         }
     }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(fwFolder) {
         isFetching = true
+        hwFolderWarning = null
         scope.launch(Dispatchers.IO) {
+            var activeFwFolder = fwFolder
             try {
                 val client = OkHttpClient()
-                val url = "https://api.github.com/repos/JanB97/RykerConnect/contents/Firmware/MainUnit_ESP32S3-REV01?t=${System.currentTimeMillis()}"
+                val url = "https://api.github.com/repos/JanB97/RykerConnect/contents/Firmware/$activeFwFolder?t=${System.currentTimeMillis()}"
                 val request = Request.Builder()
                     .url(url)
                     .header("Accept", "application/vnd.github+json")
@@ -118,6 +130,7 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
                     .build()
 
                 val response: Response = client.newCall(request).execute()
+                var success = false
                 response.use { resp ->
                     if (resp.isSuccessful) {
                         val bodyString = resp.body?.string()
@@ -134,8 +147,38 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
                             if (list.isNotEmpty()) {
                                 val sortedList = list.sortedDescending()
                                 versions = sortedList
-                                // Always select the latest available version
                                 store.saveFwVersion(sortedList.first())
+                                success = true
+                            }
+                        }
+                    }
+                }
+
+                // Fallback: if dynamic folder failed, try the default folder
+                if (!success && activeFwFolder != FALLBACK_FIRMWARE_FOLDER) {
+                    hwFolderWarning = "Folder '$activeFwFolder' not found – using fallback $FALLBACK_FIRMWARE_FOLDER"
+                    activeFwFolder = FALLBACK_FIRMWARE_FOLDER
+                    val fbUrl = "https://api.github.com/repos/JanB97/RykerConnect/contents/Firmware/$activeFwFolder?t=${System.currentTimeMillis()}"
+                    val fbRequest = Request.Builder().url(fbUrl)
+                        .header("Accept", "application/vnd.github+json")
+                        .header("User-Agent", "RykerConnect-App")
+                        .build()
+                    val fbResponse = client.newCall(fbRequest).execute()
+                    fbResponse.use { resp ->
+                        if (resp.isSuccessful) {
+                            val bodyString = resp.body?.string()
+                            if (bodyString != null) {
+                                val json = JSONArray(bodyString)
+                                val list = mutableListOf<String>()
+                                for (i in 0 until json.length()) {
+                                    val name = json.getJSONObject(i).getString("name")
+                                    if (name.startsWith("V", ignoreCase = true)) list.add(name)
+                                }
+                                if (list.isNotEmpty()) {
+                                    val sortedList = list.sortedDescending()
+                                    versions = sortedList
+                                    store.saveFwVersion(sortedList.first())
+                                }
                             }
                         }
                     }
@@ -143,13 +186,15 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
             } catch (e: Exception) {
                 Log.e("FirmwareUpdateScreen", "Fetch versions failed", e)
             } finally {
+                // Update fwFolder to whichever was actually used
+                fwFolder = activeFwFolder
                 isFetching = false
             }
 
             // Fetch changelog
             try {
                 val client = OkHttpClient()
-                val clUrl = "https://raw.githubusercontent.com/JanB97/RykerConnect/main/Firmware/MainUnit_ESP32S3-REV01/changelog.txt?t=${System.currentTimeMillis()}"
+                val clUrl = "https://raw.githubusercontent.com/JanB97/RykerConnect/main/Firmware/$activeFwFolder/changelog.txt?t=${System.currentTimeMillis()}"
                 val clRequest = Request.Builder()
                     .url(clUrl)
                     .header("User-Agent", "RykerConnect-App")
@@ -188,12 +233,33 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // ── Installed version ────────────────────────────────────────
-            if (installedFwVersion != null) {
+            if (installedFwVersion != null || hardwareVersion != null) {
                 Text(
-                    "Installed: $installedFwVersion",
+                    buildString {
+                        if (installedFwVersion != null) append("Installed: $installedFwVersion")
+                        if (hardwareVersion != null) {
+                            if (isNotEmpty()) append("  •  ")
+                            append("HW: $hardwareVersion")
+                        }
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+
+            // Hardware folder warning
+            if (hwFolderWarning != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFFFF9800), MaterialTheme.shapes.small)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Error, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(hwFolderWarning!!, color = Color.White, style = MaterialTheme.typography.bodySmall)
+                }
             }
 
             Row(
@@ -248,7 +314,7 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
                 exit = shrinkVertically() + fadeOut()
             ) {
                 OutlinedButton(
-                    onClick = { downloadFirmwareFile(context, fwVersion.value) },
+                    onClick = { downloadFirmwareFile(context, fwVersion.value, fwFolder) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Default.Download, contentDescription = null)
@@ -411,7 +477,7 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
                 onClick = {
                     val ssid = if (useHotspot.value) localHotspotSsid else localWlanSsid
                     val pwd = if (useHotspot.value) localHotspotPwd else localWlanPwd
-                    startFirmwareUpdate(context, autoDownload.value, fwVersion.value, ssid, pwd)
+                    startFirmwareUpdate(context, autoDownload.value, fwVersion.value, ssid, pwd, fwFolder)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = isBleConnected
@@ -446,8 +512,8 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
     }
 }
 
-private fun downloadFirmwareFile(context: Context, version: String) {
-    val url = "https://github.com/JanB97/RykerConnect/raw/main/Firmware/MainUnit_ESP32S3-REV01/${version}/firmware.bin"
+private fun downloadFirmwareFile(context: Context, version: String, folder: String) {
+    val url = "https://github.com/JanB97/RykerConnect/raw/main/Firmware/$folder/${version}/firmware.bin"
     try {
         val request = DownloadManager.Request(url.toUri())
             .setTitle("Ryker Firmware $version")
@@ -470,9 +536,10 @@ private fun startFirmwareUpdate(
     auto: Boolean,
     version: String,
     ssid: String,
-    pwd: String
+    pwd: String,
+    folder: String
 ) {
-    val downloadUrl = if (auto) "https://github.com/JanB97/RykerConnect/raw/main/Firmware/MainUnit_ESP32S3-REV01/${version}/firmware.bin" else null
+    val downloadUrl = if (auto) "https://github.com/JanB97/RykerConnect/raw/main/Firmware/$folder/${version}/firmware.bin" else null
 
     RykerConnectApplication.activeConnection.value?.sendFirmwareUpdate(ssid, pwd, downloadUrl)
 

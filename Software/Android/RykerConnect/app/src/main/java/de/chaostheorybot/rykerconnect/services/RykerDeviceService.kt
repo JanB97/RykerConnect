@@ -33,8 +33,10 @@ class RykerDeviceService : CompanionDeviceService() {
     private val chargeStateReceiver: BroadcastReceiver = ChargeStateReceiver()
     private val spotifyReceiver: BroadcastReceiver = SpotifyReceiver()
     private var batteryUpdateJob: Job? = null
+    private var watchdogJob: Job? = null
     private var youTubeMusicManager: YouTubeMusicManager? = null
     private lateinit var networkTypeMonitor: NetworkTypeMonitor
+    private var volumeMonitor: VolumeMonitor? = null
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun onCreate() {
@@ -75,6 +77,7 @@ class RykerDeviceService : CompanionDeviceService() {
     override fun onDeviceAppeared(address: String) { initDeviceConnection(address) }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    @Deprecated("Legacy override", replaceWith = ReplaceWith(""))
     override fun onDeviceAppeared(info: AssociationInfo) {
         info.deviceMacAddress?.toString()?.let { initDeviceConnection(it) }
     }
@@ -92,6 +95,12 @@ class RykerDeviceService : CompanionDeviceService() {
 
         serviceScope.launch {
             store.saveBLEAppear(true)
+
+            // Read service toggles
+            val musicEnabled = store.isMusicEnabled()
+            val intercomBatteryEnabled = store.isIntercomBatteryEnabled()
+            val volumeEnabled = store.isVolumeEnabled()
+
             val device: BluetoothDevice? = getDevice(application, address)
             if (device != null) {
                 val connection = BLEDeviceConnection(application, device)
@@ -99,15 +108,57 @@ class RykerDeviceService : CompanionDeviceService() {
                 
                 if (waitForBLEConnection()) {
                     connection.syncAll()
-                    withContext(Dispatchers.Main) { setupMusicManager(store) }
-                    
+                    if (musicEnabled) {
+                        withContext(Dispatchers.Main) { setupMusicManager(store) }
+                    }
+
                     // Erneuter Sync nach 5 Sek zur Sicherheit
                     delay(5000)
                     if (connection.isConnected.value) connection.syncAll()
                 }
             }
+
+            // Start volume monitor if enabled (stop any previous instance first)
+            if (volumeEnabled) {
+                withContext(Dispatchers.Main) {
+                    volumeMonitor?.stopMonitoring()
+                    volumeMonitor = VolumeMonitor(this@RykerDeviceService)
+                    volumeMonitor?.startMonitoring()
+                }
+            }
+
+            // Start BLE watchdog ping
+            startWatchdog()
         }
-        startIntercomBatteryUpdates(store)
+        // Start intercom battery updates only if enabled
+        serviceScope.launch {
+            if (store.isIntercomBatteryEnabled()) {
+                startIntercomBatteryUpdates(store)
+            }
+        }
+    }
+
+    /**
+     * BLE Watchdog: The ESP disconnects after 10 min without any characteristic write.
+     * This job checks every 60 s and sends a lightweight time-sync ping if no write
+     * has occurred for 9 min 45 s (585 000 ms).  Under normal operation the regular
+     * data forwarding (battery, media, network, volume) keeps the connection alive,
+     * so this should rarely fire.
+     */
+    private fun startWatchdog() {
+        watchdogJob?.cancel()
+        watchdogJob = serviceScope.launch {
+            while (isActive) {
+                delay(60_000) // prüfe alle 60 s
+                val conn = RykerConnectApplication.activeConnection.value ?: continue
+                if (!conn.isConnected.value) continue
+                val elapsed = android.os.SystemClock.elapsedRealtime() - conn.lastWriteTimestamp
+                if (elapsed >= 585_000) { // 9 min 45 s
+                    conn.writeTime()
+                    Log.d("RykerDeviceService", "BLE watchdog ping sent (idle ${elapsed / 1000}s)")
+                }
+            }
+        }
     }
 
     private fun setupMusicManager(store: RykerConnectStore) {
@@ -148,9 +199,11 @@ class RykerDeviceService : CompanionDeviceService() {
         }
     }
 
+    @Deprecated("Legacy")
     override fun onDeviceDisappeared(address: String) { cleanup() }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+    @Deprecated("Legacy override", replaceWith = ReplaceWith(""))
     override fun onDeviceDisappeared(info: AssociationInfo) { cleanup() }
 
     private fun cleanup() {
@@ -159,7 +212,10 @@ class RykerDeviceService : CompanionDeviceService() {
         try { unregisterReceiver(spotifyReceiver) } catch (_: Exception) {}
         youTubeMusicManager?.destroy()
         youTubeMusicManager = null
+        volumeMonitor?.stopMonitoring()
+        volumeMonitor = null
         batteryUpdateJob?.cancel()
+        watchdogJob?.cancel()
         RykerConnectApplication.activeConnection.value?.disconnect()
         RykerConnectApplication.activeConnection.value = null
     }

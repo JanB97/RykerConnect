@@ -44,6 +44,12 @@ class RykerConnectStore(private val context: Context) {
         private val FW_WLAN_PWD = stringPreferencesKey("fw_wlan_pwd")
         private val FW_HOTSPOT_SSID = stringPreferencesKey("fw_hotspot_ssid")
         private val FW_HOTSPOT_PWD = stringPreferencesKey("fw_hotspot_pwd")
+
+        // Service Toggles
+        private val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
+        private val MUSIC_ENABLED = booleanPreferencesKey("music_enabled")
+        private val VOLUME_ENABLED = booleanPreferencesKey("volume_enabled")
+        private val INTERCOM_BATTERY_ENABLED = booleanPreferencesKey("intercom_battery_enabled")
     }
 
     // Getters
@@ -76,6 +82,12 @@ class RykerConnectStore(private val context: Context) {
     val getFwHotspotSsid: Flow<String> = context.dataStore.data.map { it[FW_HOTSPOT_SSID] ?: "" }
     val getFwHotspotPwd: Flow<String> = context.dataStore.data.map { it[FW_HOTSPOT_PWD] ?: "" }
 
+    // Service Toggle Getters
+    val getNotificationsEnabled: Flow<Boolean> = context.dataStore.data.map { it[NOTIFICATIONS_ENABLED] ?: true }
+    val getMusicEnabled: Flow<Boolean> = context.dataStore.data.map { it[MUSIC_ENABLED] ?: true }
+    val getVolumeEnabled: Flow<Boolean> = context.dataStore.data.map { it[VOLUME_ENABLED] ?: true }
+    val getIntercomBatteryEnabled: Flow<Boolean> = context.dataStore.data.map { it[INTERCOM_BATTERY_ENABLED] ?: true }
+
     // Save Methods
     suspend fun saveFistLaunch(token: Boolean) { context.dataStore.edit { it[FIRST_LAUNCH_TOKEN] = token } }
     suspend fun saveSelectedMac(token: String) { context.dataStore.edit { it[SEL_MAC_TOKEN] = token } }
@@ -94,6 +106,18 @@ class RykerConnectStore(private val context: Context) {
     suspend fun saveFwWlanPwd(value: String) { context.dataStore.edit { it[FW_WLAN_PWD] = value } }
     suspend fun saveFwHotspotSsid(value: String) { context.dataStore.edit { it[FW_HOTSPOT_SSID] = value } }
     suspend fun saveFwHotspotPwd(value: String) { context.dataStore.edit { it[FW_HOTSPOT_PWD] = value } }
+
+    // Service Toggle Savers
+    suspend fun saveNotificationsEnabled(value: Boolean) { context.dataStore.edit { it[NOTIFICATIONS_ENABLED] = value } }
+    suspend fun saveMusicEnabled(value: Boolean) { context.dataStore.edit { it[MUSIC_ENABLED] = value } }
+    suspend fun saveVolumeEnabled(value: Boolean) { context.dataStore.edit { it[VOLUME_ENABLED] = value } }
+    suspend fun saveIntercomBatteryEnabled(value: Boolean) { context.dataStore.edit { it[INTERCOM_BATTERY_ENABLED] = value } }
+
+    // Service Toggle one-shot getters
+    suspend fun isNotificationsEnabled(): Boolean = context.dataStore.data.first()[NOTIFICATIONS_ENABLED] ?: true
+    suspend fun isMusicEnabled(): Boolean = context.dataStore.data.first()[MUSIC_ENABLED] ?: true
+    suspend fun isVolumeEnabled(): Boolean = context.dataStore.data.first()[VOLUME_ENABLED] ?: true
+    suspend fun isIntercomBatteryEnabled(): Boolean = context.dataStore.data.first()[INTERCOM_BATTERY_ENABLED] ?: true
 
     suspend fun clearMediaSaves() {
         context.dataStore.edit { preferences ->
