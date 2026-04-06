@@ -17,6 +17,7 @@ class ServerCallbacks : public NimBLEServerCallbacks
         D_println("");
 
         blConnected = true;
+        lastBLEActivityMillis = millis();
         screenToDisplay = sEEPROM.screen;
 
         // Show pairing PIN if device is not bonded (1000ms delay in draw
@@ -45,6 +46,7 @@ class ServerCallbacks : public NimBLEServerCallbacks
         D_println("");
 
         blConnected = false;
+        lastBLEActivityMillis = 0;
         pairingActive = false;
         NimBLEDevice::startAdvertising();
     };
@@ -72,6 +74,7 @@ class BLECharCallbacks : public NimBLECharacteristicCallbacks
     void onWrite(NimBLECharacteristic *pCharacteristic, NimBLEConnInfo &connInfo) override
     {
 
+        lastBLEActivityMillis = millis();
         String char_uuid = pCharacteristic->getUUID().toString().c_str();
 
         D_println("");
@@ -129,6 +132,9 @@ class BLECharCallbacks : public NimBLECharacteristicCallbacks
         else if (char_uuid == DISPLAY_REINIT_UUID){
             reinitDisplayCallback();
         }
+        else if (char_uuid == VOLUME_UUID){
+            volumeCallback(pCharacteristic->getValue<uint8_t>());
+        }
         else
         {
             D_printf("UUID %s not matching or not implemented!", char_uuid);
@@ -164,6 +170,9 @@ class BLECharCallbacks : public NimBLECharacteristicCallbacks
         }else if(char_uuid == FIRMWARE_VERSION_UUID){
             D_println(" Read Firmware Version");
             pCharacteristic->setValue((uint16_t)VERSION);
+        }else if(char_uuid == HARDWARE_VERSION_UUID){
+            D_println(" Read Hardware Version");
+            pCharacteristic->setValue(HARDWARE_VERSION);
         }
     }
 };
@@ -183,7 +192,8 @@ void setupBLEServer()
     NimBLEDevice::setSecurityPasskey(blePin);
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_ONLY);
     NimBLEServer *pServer = NimBLEDevice::createServer();
-    pServer->setCallbacks(new ServerCallbacks());
+    static ServerCallbacks serverCallbacks;
+    pServer->setCallbacks(&serverCallbacks);
 
     /** Optional: set the transmit power in dBm */
     NimBLEDevice::setPower(9); /** +9db */
@@ -256,26 +266,30 @@ void setupBLEServer()
     NimBLECharacteristic *firmwareResetCharacteristic = pService->createCharacteristic(FIRMWARE_RESET_UUID, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_AUTHEN);
     NimBLECharacteristic *displayReinitCharacteristic = pService->createCharacteristic(DISPLAY_REINIT_UUID, NIMBLE_PROPERTY::WRITE);
     NimBLECharacteristic *firmwareVersionCharacteristic = pService->createCharacteristic(FIRMWARE_VERSION_UUID, NIMBLE_PROPERTY::READ);
+    NimBLECharacteristic *hardwareVersionCharacteristic = pService->createCharacteristic(HARDWARE_VERSION_UUID, NIMBLE_PROPERTY::READ);
+    NimBLECharacteristic *volumeCharacteristic = pService->createCharacteristic(VOLUME_UUID, NIMBLE_PROPERTY::WRITE);
 
-    BLECharCallbacks *charCallbacks = new BLECharCallbacks();
-    timeCharacteristic->setCallbacks(charCallbacks);
-    networkCharacteristic->setCallbacks(charCallbacks);
-    phoneBatteryCharacteristic->setCallbacks(charCallbacks);
-    intercomBatteryCharacteristic->setCallbacks(charCallbacks);
-    mediaDataCharacteristic->setCallbacks(charCallbacks);
-    notificationCharacteristic->setCallbacks(charCallbacks);
+    static BLECharCallbacks charCallbacks;
+    timeCharacteristic->setCallbacks(&charCallbacks);
+    networkCharacteristic->setCallbacks(&charCallbacks);
+    phoneBatteryCharacteristic->setCallbacks(&charCallbacks);
+    intercomBatteryCharacteristic->setCallbacks(&charCallbacks);
+    mediaDataCharacteristic->setCallbacks(&charCallbacks);
+    notificationCharacteristic->setCallbacks(&charCallbacks);
 
-    brightnessCharacteristic->setCallbacks(charCallbacks);
-    screenCharacteristic->setCallbacks(charCallbacks);
-    settingsCharacteristic->setCallbacks(charCallbacks);
-    firmwareUpdateCharacteristic->setCallbacks(charCallbacks);
-    firmwareResetCharacteristic->setCallbacks(charCallbacks);
-    displayReinitCharacteristic->setCallbacks(charCallbacks);
-    firmwareVersionCharacteristic->setCallbacks(charCallbacks);
-
+    brightnessCharacteristic->setCallbacks(&charCallbacks);
+    screenCharacteristic->setCallbacks(&charCallbacks);
+    settingsCharacteristic->setCallbacks(&charCallbacks);
+    firmwareUpdateCharacteristic->setCallbacks(&charCallbacks);
+    firmwareResetCharacteristic->setCallbacks(&charCallbacks);
+    displayReinitCharacteristic->setCallbacks(&charCallbacks);
+    firmwareVersionCharacteristic->setCallbacks(&charCallbacks);
+    hardwareVersionCharacteristic->setCallbacks(&charCallbacks);
+    volumeCharacteristic->setCallbacks(&charCallbacks);
     brightnessCharacteristic->setValue(sEEPROM.display_brightness);
     timeCharacteristic->setValue("");
     firmwareVersionCharacteristic->setValue((uint16_t)VERSION);
+    hardwareVersionCharacteristic->setValue(HARDWARE_VERSION);
 
     pServer->start();
 

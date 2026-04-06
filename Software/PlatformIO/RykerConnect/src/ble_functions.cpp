@@ -58,6 +58,30 @@ void batteryCallback(int16_t value, uint8_t type)
         intercom_battery_status = value >> 8;
         D_printf(" Intercom Battery: %i", intercom_battery_level);
     }
+
+    // Low battery warning check
+    bool phoneLow = (phone_battery_level > 0 && phone_battery_level <= sEEPROM.low_battery_threshold_phone);
+    bool intercomLow = (intercom_battery_level > 0 && intercom_battery_level <= sEEPROM.low_battery_threshold_intercom);
+    if(phoneLow || intercomLow){
+        String text = "";
+        if(phoneLow) text += "Phone: " + String(phone_battery_level) + "%";
+        if(phoneLow && intercomLow) text += "  ";
+        if(intercomLow) text += "Intercom: " + String(intercom_battery_level) + "%";
+        if(xSemaphoreTake(dataMutex, pdMS_TO_TICKS(50)) == pdTRUE){
+            lowBatteryText = text;
+            xSemaphoreGive(dataMutex);
+        }
+        lowBatteryDisplayed = true;
+        previousLowBatteryMillis = millis();
+    }
+}
+
+void volumeCallback(uint8_t value)
+{
+    D_printf(" Volume Characteristic: %i%%", value);
+    volumeLevel = value;
+    volumeDisplayed = true;
+    previousVolumeMillis = millis();
 }
 
 
@@ -162,30 +186,44 @@ void handleSettingsCallback(const uint8_t* data, uint8_t size){
             #endif
             D_printf(" Bool Adaptive Brightness: %i", data[0]);
             D_printf(" UINT8 Display Brightness: %i", data[1]);
-            D_printf(" UINT8 Screen: %i", data[2]);
-            D_printf(" UINT8 Sub Screen: %i", data[3]);
-            D_printf(" BOOL ICON1: %i", data[4]);
-            D_printf(" BOOL ICON2: %i", data[5]);
-            D_printf(" BOOL ICON3: %i", data[6]);
-            D_printf(" BOOL ICON4: %i", data[7]);
+            D_printf(" UINT16 ADC Low: %i", (uint16_t)(data[2]) | ((uint16_t)(data[3]) << 8));
+            D_printf(" UINT16 ADC High: %i", (uint16_t)(data[4]) | ((uint16_t)(data[5]) << 8));
+            D_printf(" UINT8 Screen: %i", data[6]);
+            D_printf(" UINT8 Sub Screen: %i", data[7]);
+            D_printf(" BOOL ICON1: %i", data[8]);
+            D_printf(" BOOL ICON2: %i", data[9]);
+            D_printf(" BOOL ICON3: %i", data[10]);
+            D_printf(" BOOL ICON4: %i", data[11]);
             D_flush();
-            D_printf(" UINT8_t First Battery Icon: %i", data[8]);
-            D_printf(" UINT32 Battery INTERVAL: %i", (data[12] << 24) | (data[11] << 16) | (data[10] << 8) | data[9]);
-            D_printf(" UINT32 Notification INTERVAL: %i", (data[16] << 24) | (data[15] << 16) | (data[14] << 8) | data[13]);
+            D_printf(" INT8 First Battery Icon: %i", data[12]);
+            D_printf(" UINT32 Battery INTERVAL: %i", (data[16] << 24) | (data[15] << 16) | (data[14] << 8) | data[13]);
+            D_printf(" UINT8 Low Battery Threshold Phone: %i", data[17]);
+            D_printf(" UINT8 Low Battery Threshold Intercom: %i", data[18]);
+            D_printf(" UINT32 Notification INTERVAL: %i", (data[22] << 24) | (data[21] << 16) | (data[20] << 8) | data[19]);
             D_flush();
             #pragma endregion
 
             sEEPROM.adaptive_brightness = (bool)data[0];
             sEEPROM.display_brightness = (uint8_t)data[1];
-            sEEPROM.screen = (uint8_t)data[2];
-            sEEPROM.sub_screen = (uint8_t)data[3];
-            sEEPROM.battery_icon_selection[0] = (bool)data[4];
-            sEEPROM.battery_icon_selection[1] = (bool)data[5];
-            sEEPROM.battery_icon_selection[2] = (bool)data[6];
-            sEEPROM.battery_icon_selection[3] = (bool)data[7];
-            sEEPROM.battery_icon_first = (int8_t)data[8];
-            sEEPROM.battery_icon_interval = (data[12] << 24) | (data[11] << 16) | (data[10] << 8) | data[9];
-            sEEPROM.notification_interval = (data[16] << 24) | (data[15] << 16) | (data[14] << 8) | data[13];
+            uint16_t new_adc_low  = (uint16_t)(data[2]) | ((uint16_t)(data[3]) << 8);
+            uint16_t new_adc_high = (uint16_t)(data[4]) | ((uint16_t)(data[5]) << 8);
+            if(new_adc_high > 0 && new_adc_high > new_adc_low){
+                sEEPROM.auto_brightness_adc_low  = new_adc_low;
+                sEEPROM.auto_brightness_adc_high = new_adc_high;
+            }
+            sEEPROM.screen = (uint8_t)data[6];
+            sEEPROM.sub_screen = (uint8_t)data[7];
+            sEEPROM.battery_icon_selection[0] = (bool)data[8];
+            sEEPROM.battery_icon_selection[1] = (bool)data[9];
+            sEEPROM.battery_icon_selection[2] = (bool)data[10];
+            sEEPROM.battery_icon_selection[3] = (bool)data[11];
+            sEEPROM.battery_icon_first = (int8_t)data[12];
+            sEEPROM.battery_icon_interval = (data[16] << 24) | (data[15] << 16) | (data[14] << 8) | data[13];
+            sEEPROM.low_battery_threshold_phone = data[17];
+            sEEPROM.low_battery_threshold_intercom = data[18];
+            sEEPROM.notification_interval = (data[22] << 24) | (data[21] << 16) | (data[20] << 8) | data[19];
+            // temp_calibration at bytes 23-26: not overwritten from BLE
+            // reserved bytes 27-34: not parsed
             sEEPROM.crc = calc_crc();
             //EEPROM.put(0,sEEPROM);
             //EEPROM.commit();

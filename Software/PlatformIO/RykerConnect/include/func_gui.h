@@ -15,6 +15,8 @@ void drawNetworkStatus(int x, int y, uint8_t signal, String type);
 void drawOTAPopup();
 void drawResetPopup();
 void drawPairingPopup();
+void drawVolumePopup();
+void drawLowBatteryPopup();
 void drawNotificationPopup(String type,String title, String text);
 void drawPlay(int pos_x, int pos_y);
 void drawPause(int pos_x, int pos_y);

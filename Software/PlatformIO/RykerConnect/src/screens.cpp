@@ -120,4 +120,6 @@ void drawPopups(){
   drawOTAPopup();
   drawResetPopup();
   drawPairingPopup();
+  drawLowBatteryPopup();
+  drawVolumePopup();
 }

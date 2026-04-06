@@ -215,38 +215,56 @@ Screen indices:
 
 | Offset | Size | Type | Field | Description |
 |--------|------|------|-------|-------------|
+| **Brightness** |
 | 0 | 1 | bool | adaptive_brightness | Adaptive brightness enabled |
 | 1 | 1 | uint8_t | display_brightness | Display brightness (0–255) |
-| 2 | 1 | uint8_t | screen | Active screen index (0–2) |
-| 3 | 1 | uint8_t | sub_screen | Sub-screen index |
-| 4 | 1 | bool | battery_icon_selection[0] | Show battery icon 1 |
-| 5 | 1 | bool | battery_icon_selection[1] | Show battery icon 2 |
-| 6 | 1 | bool | battery_icon_selection[2] | Show battery icon 3 |
-| 7 | 1 | bool | battery_icon_selection[3] | Show battery icon 4 |
-| 8 | 1 | int8_t | battery_icon_first | First battery icon to show |
-| 9–12 | 4 | uint32_t (LE) | battery_icon_interval | Battery icon rotation interval (ms) |
-| 13–16 | 4 | uint32_t (LE) | notification_interval | Notification display duration (ms) |
-| 17–20 | 4 | float (LE) | temp_calibration | Temperature calibration offset (degrees to subtract) |
-| 21–24 | 4 | uint32_t (LE) | crc | CRC32 checksum |
+| 2–3 | 2 | uint16_t (LE) | auto_brightness_adc_low | ADC value (0–4095) below which min brightness is applied (default: 200) |
+| 4–5 | 2 | uint16_t (LE) | auto_brightness_adc_high | ADC value (0–4095) above which max brightness is applied (default: 3500) |
+| **Screen** |
+| 6 | 1 | uint8_t | screen | Active screen index (0=Default, 1=Media, 2=Split) |
+| 7 | 1 | uint8_t | sub_screen | Sub-screen index |
+| **Battery Icon** |
+| 8 | 1 | bool | battery_icon_selection[0] | Show phone battery icon |
+| 9 | 1 | bool | battery_icon_selection[1] | Show intercom battery icon |
+| 10 | 1 | bool | battery_icon_selection[2] | (reserved) |
+| 11 | 1 | bool | battery_icon_selection[3] | (reserved) |
+| 12 | 1 | int8_t | battery_icon_first | First battery icon to show |
+| 13–16 | 4 | uint32_t (LE) | battery_icon_interval | Battery icon rotation interval (ms) |
+| **Low Battery Warning** |
+| 17 | 1 | uint8_t | low_battery_threshold_phone | Phone low-battery warning threshold % (default: 15) |
+| 18 | 1 | uint8_t | low_battery_threshold_intercom | Intercom low-battery warning threshold % (default: 15) |
+| **Other** |
+| 19–22 | 4 | uint32_t (LE) | notification_interval | Notification display duration (ms) |
+| 23–26 | 4 | float (LE) | temp_calibration | Temperature offset in °C (subtracted from sensor) |
+| **Reserved** |
+| 27–34 | 8 | uint8_t[8] | reserved | Reserved for future use |
+| **CRC** |
+| 35–38 | 4 | uint32_t (LE) | crc | CRC32 checksum |
 
-Total: **25 bytes**
+Total: **39 bytes**
 
-**Write** – Update all settings. Send bytes 0–20 (without CRC, **21 bytes**). The CRC is recalculated automatically by the ESP. Settings are persisted to flash (NVS/Preferences).
+**Write** – Update all settings. Send **35 bytes** (struct without CRC). The CRC is recalculated automatically. Settings are persisted to flash (NVS/Preferences).
 
-Write payload (21 bytes = struct size minus CRC):
+Write payload (35 bytes = struct size minus CRC):
 
-| Offset | Size | Type | Field |
-|--------|------|------|-------|
-| 0 | 1 | bool | adaptive_brightness |
-| 1 | 1 | uint8_t | display_brightness |
-| 2 | 1 | uint8_t | screen |
-| 3 | 1 | uint8_t | sub_screen |
-| 4–7 | 4 | bool[4] | battery_icon_selection |
-| 8 | 1 | int8_t | battery_icon_first |
-| 9–12 | 4 | uint32_t (LE) | battery_icon_interval |
-| 13–16 | 4 | uint32_t (LE) | notification_interval |
+| Offset | Size | Type | Field | Notes |
+|--------|------|------|-------|-------|
+| 0 | 1 | bool | adaptive_brightness | |
+| 1 | 1 | uint8_t | display_brightness | |
+| 2–3 | 2 | uint16_t (LE) | auto_brightness_adc_low | Send `0` to keep current value |
+| 4–5 | 2 | uint16_t (LE) | auto_brightness_adc_high | Send `0` to keep current value |
+| 6 | 1 | uint8_t | screen | |
+| 7 | 1 | uint8_t | sub_screen | |
+| 8–11 | 4 | bool[4] | battery_icon_selection | |
+| 12 | 1 | int8_t | battery_icon_first | |
+| 13–16 | 4 | uint32_t (LE) | battery_icon_interval | |
+| 17 | 1 | uint8_t | low_battery_threshold_phone | |
+| 18 | 1 | uint8_t | low_battery_threshold_intercom | |
+| 19–22 | 4 | uint32_t (LE) | notification_interval | |
+| 23–26 | 4 | float (LE) | temp_calibration | Sent but **not overwritten** by ESP |
+| 27–34 | 8 | uint8_t[8] | reserved | Send `0` |
 
-**Note:** `temp_calibration` and `crc` are NOT included in the write payload. The ESP expects exactly `sizeof(EEPROM_Struct) - sizeof(uint32_t)` bytes (struct size minus CRC).
+**Note:** `crc` is NOT included in the write payload. The ESP expects exactly `sizeof(EEPROM_Struct) - sizeof(uint32_t)` = **35 bytes**. ADC thresholds are only updated if `adc_high > adc_low` and both are non-zero.
 
 ---
 
@@ -334,6 +352,34 @@ The version value corresponds to the `VERSION` compile-time constant. To display
 
 ---
 
+### 14. Hardware Version
+
+| Property | Value |
+|----------|-------|
+| UUID | `3ae9aece-1b67-4281-a53b-748adf23f484` |
+| Permissions | READ |
+
+**Read** – Returns the hardware version as a string (e.g. `"REV01"`).
+
+---
+
+### 15. Volume
+
+| Property | Value |
+|----------|-------|
+| UUID | `c4e83b7d-5a12-4f8e-b9d6-3e7f1c2a4b8d` |
+| Permissions | WRITE |
+
+**Write** – Send the current volume level. Displays a popup with percentage and progress bar for 2 seconds.
+
+| Byte | Type | Description |
+|------|------|-------------|
+| 0 | uint8_t | Volume level (0 = Mute, 1–100 = percentage) |
+
+Total: **1 byte**
+
+---
+
 ## Data Encoding Notes
 
 - **Byte order:** All multi-byte integers use **little-endian** unless noted otherwise.
@@ -353,24 +399,43 @@ The version value corresponds to the `VERSION` compile-time constant. To display
 // After discovering services:
 val settingsChar = service.getCharacteristic(UUID.fromString("05f7c3e4-daac-4953-8c71-20eacdf0c7a1"))
 gatt.readCharacteristic(settingsChar)
-// In onCharacteristicRead callback, parse the 25-byte response per struct layout above
+// In onCharacteristicRead callback, parse the 39-byte response per struct layout above
 ```
 
 ### Writing Settings
 ```kotlin
-val data = ByteArray(21) // sizeof(EEPROM_Struct) - sizeof(CRC)
-data[0] = if (adaptiveBrightness) 1 else 0
-data[1] = brightness.toByte()
-data[2] = screen.toByte()
-data[3] = subScreen.toByte()
-data[4] = if (batteryIcon1) 1 else 0
-data[5] = if (batteryIcon2) 1 else 0
-data[6] = if (batteryIcon3) 1 else 0
-data[7] = if (batteryIcon4) 1 else 0
-data[8] = batteryIconFirst.toByte()
-// bytes 9-12: battery_icon_interval as uint32 LE
-// bytes 13-16: notification_interval as uint32 LE
-// bytes 17-20: temp_calibration as float LE
+val data = ByteArray(35) // sizeof(EEPROM_Struct) - sizeof(CRC)
+val buf = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN)
+
+// Brightness (bytes 0-5)
+buf.put(if (adaptiveBrightness) 1.toByte() else 0.toByte())  // [0]
+buf.put(brightness.toByte())                                   // [1]
+buf.putShort(adcBrightnessLow.toShort())                       // [2-3] 0 = keep current
+buf.putShort(adcBrightnessHigh.toShort())                      // [4-5] 0 = keep current
+
+// Screen (bytes 6-7)
+buf.put(screen.toByte())                                       // [6]
+buf.put(subScreen.toByte())                                    // [7]
+
+// Battery icon (bytes 8-16)
+buf.put(if (batteryIcon1) 1.toByte() else 0.toByte())          // [8]
+buf.put(if (batteryIcon2) 1.toByte() else 0.toByte())          // [9]
+buf.put(0)                                                     // [10] reserved
+buf.put(0)                                                     // [11] reserved
+buf.put(batteryIconFirst.toByte())                             // [12]
+buf.putInt(batteryIconInterval)                                // [13-16]
+
+// Low battery warning (bytes 17-18)
+buf.put(lowBatteryThresholdPhone.toByte())                     // [17]
+buf.put(lowBatteryThresholdIntercom.toByte())                  // [18]
+
+// Other (bytes 19-26)
+buf.putInt(notificationInterval)                               // [19-22]
+buf.putFloat(0f)                                               // [23-26] temp_calibration: send 0, ESP ignores
+
+// Reserved (bytes 27-34)
+repeat(8) { buf.put(0) }
+
 settingsChar.value = data
 gatt.writeCharacteristic(settingsChar)
 ```
@@ -393,4 +458,11 @@ gatt.writeCharacteristic(mediaChar)
 val payload = "$type\u0003$title\u0003$text"
 notificationChar.value = payload.toByteArray(Charsets.UTF_8)
 gatt.writeCharacteristic(notificationChar)
+```
+
+### Sending Volume
+```kotlin
+val volumeChar = service.getCharacteristic(UUID.fromString("c4e83b7d-5a12-4f8e-b9d6-3e7f1c2a4b8d"))
+volumeChar.value = byteArrayOf(volumePercent.toByte()) // 0 = Mute, 1-100 = %
+gatt.writeCharacteristic(volumeChar)
 ```

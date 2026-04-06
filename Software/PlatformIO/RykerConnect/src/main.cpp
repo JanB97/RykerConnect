@@ -1,6 +1,7 @@
 #include "main.h"
 #include "screens.h"
 #include <Preferences.h>
+#include <esp_task_wdt.h>
 #include <SPI.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
@@ -123,6 +124,7 @@ bool downloadAndFlashFirmware(const String& url) {
                 lastDisplayedPercent = otaDownloadPercent;
             }
         }
+        esp_task_wdt_reset();
         delay(1);
     }
     D_printf("[OTA] Download complete, %d bytes written", written);
@@ -203,6 +205,10 @@ void setup() {
 
   setupBLEServer();
 
+  // Hardware Watchdog: restart if loop hangs for 30s
+  esp_task_wdt_init(30, true);
+  esp_task_wdt_add(NULL);
+
   setupWebServer();
 
   srand(millis());
@@ -229,6 +235,7 @@ void setup() {
 
 void loop() {
 
+  esp_task_wdt_reset();
   runTimers();
 
   switch(screenToDisplay){

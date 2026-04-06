@@ -320,6 +320,64 @@ void drawPairingPopup(){
     }
 }
 
+void drawVolumePopup(){
+    if(!volumeDisplayed) return;
+
+    int popW = 160;
+    int popH = 52;
+    int popX = OLED_WIDTH/2 - popW/2;
+    int popY = OLED_HEIGHT - popH - 6;
+
+    u8g2_current->setDrawColor(0);
+    drawRBox(popX, popY, popW+3, popH+3, 20);
+    u8g2_current->setDrawColor(1);
+    drawRFrame(popX, popY, popW, popH, 18);
+
+    u8g2_current->setFont(u8g2_font_profont17_tf);
+    if(volumeLevel == 0){
+        drawStr(popX + popW/2 - u8g2_current->getStrWidth("Mute")/2, popY + 20, "Mute");
+    } else {
+        char volStr[8];
+        snprintf(volStr, sizeof(volStr), "%d %%", volumeLevel);
+        drawStr(popX + popW/2 - u8g2_current->getStrWidth(volStr)/2, popY + 20, volStr);
+    }
+
+    int barX = popX + 12;
+    int barY = popY + 28;
+    int barW = popW - 24;
+    int barH = 10;
+    drawRFrame(barX, barY, barW, barH, 4);
+    int fillW = (barW - 4) * volumeLevel / 100;
+    if(fillW > 0){
+        drawRBox(barX + 2, barY + 2, fillW, barH - 4, 2);
+    }
+}
+
+void drawLowBatteryPopup(){
+    if(!lowBatteryDisplayed) return;
+
+    String localText;
+    if(xSemaphoreTake(dataMutex, pdMS_TO_TICKS(50)) == pdTRUE){
+        localText = lowBatteryText;
+        xSemaphoreGive(dataMutex);
+    }
+
+    int popW = 180;
+    int popH = 44;
+    int popX = OLED_WIDTH/2 - popW/2;
+    int popY = OLED_HEIGHT - popH - 6;
+
+    u8g2_current->setDrawColor(0);
+    drawRBox(popX, popY, popW+3, popH+3, 20);
+    u8g2_current->setDrawColor(1);
+    drawRFrame(popX, popY, popW, popH, 18);
+
+    u8g2_current->setFont(u8g2_font_profont17_tf);
+    drawStr(popX + popW/2 - u8g2_current->getStrWidth("Low Battery")/2, popY + 18, "Low Battery");
+    u8g2_current->setFont(u8g2_font_profont15_tf);
+    drawStr(popX + popW/2 - u8g2_current->getStrWidth(localText.c_str())/2, popY + 35, localText.c_str());
+}
+
 
 #pragma region MUSICUI
 #define btnSize 14

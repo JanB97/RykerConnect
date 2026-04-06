@@ -96,7 +96,27 @@ bool showIntercomIcon = false;
 Preferences prefs;
 struct EEPROM_Struct sEEPROM;
 
+#pragma endregion
 
+#pragma region Volume Variables
+uint8_t volumeLevel = 0;
+bool volumeDisplayed = false;
+unsigned long previousVolumeMillis = 0;
+#pragma endregion
+
+#pragma region Auto-Brightness
+unsigned long previousAutoBrightnessMillis = 0;
+float smoothedLightLevel = -1;
+#pragma endregion
+
+#pragma region BLE Watchdog
+unsigned long lastBLEActivityMillis = 0;
+#pragma endregion
+
+#pragma region Low Battery Warning
+bool lowBatteryDisplayed = false;
+unsigned long previousLowBatteryMillis = 0;
+String lowBatteryText = "";
 #pragma endregion
 
 

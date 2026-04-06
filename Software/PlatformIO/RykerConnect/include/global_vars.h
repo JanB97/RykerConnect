@@ -8,10 +8,11 @@
 #include <mcp9808.h>
 #include <freertos/semphr.h>
 
-//#define DEBUG
+#define DEBUG
 #define SPLASHSCREEN
 
-#define VERSION 0x0005
+#define VERSION 0x0006
+#define HARDWARE_VERSION "REV01"
 
 #define OLED_WIDTH 320
 #define OLED_HEIGHT 132
@@ -49,6 +50,8 @@
 #define FIRMWARE_RESET_UUID "18cb54fe-45e8-4819-a262-24b731c8b236"
 #define DISPLAY_REINIT_UUID "3a6e4b2c-8f71-4d09-b5a3-c7e2f1d08a94"
 #define FIRMWARE_VERSION_UUID "fb2385da-5290-4513-bb0c-6d0b21de619a"
+#define HARDWARE_VERSION_UUID "3ae9aece-1b67-4281-a53b-748adf23f484"
+#define VOLUME_UUID "c4e83b7d-5a12-4f8e-b9d6-3e7f1c2a4b8d"
 
 #pragma endregion  
 
@@ -131,39 +134,76 @@ extern unsigned short scrollArtistInterval;
 
 #pragma region Settings
 
-#define ADAPTIVE_BRIGHTNESS         0;
-#define DISPLAY_BRIGHTNESS          148;
-#define SCREEN_SELECTION            1;
-#define SUB_SCREEN_SELECTION        0;
-#define BATTERY_ICON_SELECTION1     1;
-#define BATTERY_ICON_SELECTION2     1;
-#define BATTERY_ICON_SELECTION3     0;
-#define BATTERY_ICON_SELECTION4     0;
-#define BATTERY_ICON_FIRST          0;
-#define BATTERY_ICON_INTERVAL       30000; //Sekunden
-#define NOTIFICATION_INTERVAL       20000; //Sekunden
+#define ADAPTIVE_BRIGHTNESS         0
+#define DISPLAY_BRIGHTNESS          148
+#define SCREEN_SELECTION            1
+#define SUB_SCREEN_SELECTION        0
+#define BATTERY_ICON_SELECTION1     1
+#define BATTERY_ICON_SELECTION2     1
+#define BATTERY_ICON_SELECTION3     0
+#define BATTERY_ICON_SELECTION4     0
+#define BATTERY_ICON_FIRST          0
+#define BATTERY_ICON_INTERVAL       30000
+#define NOTIFICATION_INTERVAL       20000
+#define LOW_BATTERY_THRESHOLD_PHONE_DEFAULT    20
+#define LOW_BATTERY_THRESHOLD_INTERCOM_DEFAULT 20
+#define AUTO_BRIGHTNESS_ADC_LOW_DEFAULT         200
+#define AUTO_BRIGHTNESS_ADC_HIGH_DEFAULT        3500
 
 extern Preferences prefs;
 extern struct EEPROM_Struct{
+    // Brightness
     bool        adaptive_brightness;
     uint8_t     display_brightness;
+    uint16_t    auto_brightness_adc_low;   // ADC value (0-4095) -> min brightness
+    uint16_t    auto_brightness_adc_high;  // ADC value (0-4095) -> max brightness
+    // Screen
     uint8_t     screen;
     uint8_t     sub_screen;
+    // Battery icon
     bool        battery_icon_selection[4]; //2 bool reserved
     int8_t      battery_icon_first;
     uint32_t    battery_icon_interval;
+    // Low battery warning
+    uint8_t     low_battery_threshold_phone;
+    uint8_t     low_battery_threshold_intercom;
+    // Other
     uint32_t    notification_interval;
     float       temp_calibration; // degrees to subtract from sensor reading
+    // Reserved for future use
+    uint8_t     reserved[8];
     uint32_t    crc;
 }__attribute__((packed)) sEEPROM;
 
 
 #pragma endregion
 
+#pragma region Volume Variables
+#define VOLUME_POPUP_INTERVAL 2000
+extern uint8_t volumeLevel;
+extern bool volumeDisplayed;
+extern unsigned long previousVolumeMillis;
+#pragma endregion
 
+#pragma region Auto-Brightness
+#define AUTO_BRIGHTNESS_INTERVAL 100
+#define AUTO_BRIGHTNESS_MIN 10
+#define AUTO_BRIGHTNESS_MAX 255
+extern unsigned long previousAutoBrightnessMillis;
+extern float smoothedLightLevel;
+#pragma endregion
 
+#pragma region BLE Watchdog
+#define BLE_STALE_TIMEOUT 600000
+extern unsigned long lastBLEActivityMillis;
+#pragma endregion
 
-
+#pragma region Low Battery Warning
+#define LOW_BATTERY_POPUP_INTERVAL 5000
+extern bool lowBatteryDisplayed;
+extern unsigned long previousLowBatteryMillis;
+extern String lowBatteryText;
+#pragma endregion
 
 #pragma region DEBUG CODE
     #ifdef DEBUG

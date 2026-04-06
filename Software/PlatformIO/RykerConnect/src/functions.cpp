@@ -79,6 +79,44 @@ void runTimers(){
         global_temp = RTC.getTemperature() - sEEPROM.temp_calibration;
       }     
   }
+
+  // Volume popup auto-dismiss
+  if(volumeDisplayed && currentMillis - previousVolumeMillis >= VOLUME_POPUP_INTERVAL){
+      volumeDisplayed = false;
+  }
+
+  // Low battery popup auto-dismiss
+  if(lowBatteryDisplayed && currentMillis - previousLowBatteryMillis >= LOW_BATTERY_POPUP_INTERVAL){
+      lowBatteryDisplayed = false;
+  }
+
+  // Auto-Brightness (EMA smoothing)
+  if(sEEPROM.adaptive_brightness && currentMillis - previousAutoBrightnessMillis >= AUTO_BRIGHTNESS_INTERVAL){
+      previousAutoBrightnessMillis = currentMillis;
+      int raw = analogRead(lightSensorPin);
+      if(smoothedLightLevel < 0){
+          smoothedLightLevel = raw;
+      } else {
+          smoothedLightLevel = smoothedLightLevel * 0.95f + raw * 0.05f;
+      }
+      uint16_t adcLow  = sEEPROM.auto_brightness_adc_low;
+      uint16_t adcHigh = sEEPROM.auto_brightness_adc_high;
+      if(adcHigh <= adcLow){ adcLow = AUTO_BRIGHTNESS_ADC_LOW_DEFAULT; adcHigh = AUTO_BRIGHTNESS_ADC_HIGH_DEFAULT; }
+      uint8_t brightness = map(constrain((int)smoothedLightLevel, adcLow, adcHigh), adcLow, adcHigh, AUTO_BRIGHTNESS_MIN, AUTO_BRIGHTNESS_MAX);
+      u8g2_0.setContrast(brightness);
+      u8g2_1.setContrast(brightness);
+  }
+
+  // BLE stale connection watchdog
+  if(blConnected && lastBLEActivityMillis > 0 && currentMillis - lastBLEActivityMillis >= BLE_STALE_TIMEOUT){
+      D_println("BLE: Stale connection detected, disconnecting...");
+      blConnected = false;
+      lastBLEActivityMillis = 0;
+      NimBLEServer* pServer = NimBLEDevice::getServer();
+      if(pServer && pServer->getConnectedCount() > 0){
+          pServer->disconnect(pServer->getPeerInfo(0).getConnHandle());
+      }
+  }
 }
 
 
@@ -104,7 +142,7 @@ String timeString(uint8_t value){
 
 void reset_settings(){
     sEEPROM.adaptive_brightness = ADAPTIVE_BRIGHTNESS;
-    sEEPROM.display_brightness = DISPLAY_BRIGHTNESS
+    sEEPROM.display_brightness = DISPLAY_BRIGHTNESS;
     sEEPROM.screen = SCREEN_SELECTION;
     sEEPROM.sub_screen = SUB_SCREEN_SELECTION;
     sEEPROM.battery_icon_selection[0] = BATTERY_ICON_SELECTION1;
@@ -114,12 +152,15 @@ void reset_settings(){
     sEEPROM.battery_icon_first = BATTERY_ICON_FIRST;
     sEEPROM.battery_icon_interval = BATTERY_ICON_INTERVAL;
     sEEPROM.notification_interval = NOTIFICATION_INTERVAL;
-    sEEPROM.temp_calibration = 0.0; // default: no offset
+    sEEPROM.temp_calibration = 0.0;
+    sEEPROM.low_battery_threshold_phone = LOW_BATTERY_THRESHOLD_PHONE_DEFAULT;
+    sEEPROM.low_battery_threshold_intercom = LOW_BATTERY_THRESHOLD_INTERCOM_DEFAULT;
+    sEEPROM.auto_brightness_adc_low = AUTO_BRIGHTNESS_ADC_LOW_DEFAULT;
+    sEEPROM.auto_brightness_adc_high = AUTO_BRIGHTNESS_ADC_HIGH_DEFAULT;
+    memset(sEEPROM.reserved, 0, sizeof(sEEPROM.reserved));
     sEEPROM.crc = calc_crc();
 
     D_printf("Settings reset... \n New CRC: %i, Saving Settings to EEPROM", sEEPROM.crc);
-    //EEPROM.put(0, sEEPROM);
-    //EEPROM.commit();
     prefs.putBytes("settings", &sEEPROM, sizeof(EEPROM_Struct));
 }
 
