@@ -5,6 +5,7 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <HTTPClient.h>
 #include <Update.h>
 #include <ESPmDNS.h>
 #include <Wire.h>
@@ -42,71 +43,45 @@ bool downloadAndFlashFirmware(const String& url) {
     drawOTAPopup();
     u8g2_current->sendBuffer();
 
-    // Parse URL: http(s)://host:port/path
-    String urlStr = url;
-    bool useHttps = urlStr.startsWith("https://");
-    if(useHttps) urlStr = urlStr.substring(8);
-    else if(urlStr.startsWith("http://")) urlStr = urlStr.substring(7);
-
-    String host;
-    uint16_t port = useHttps ? 443 : 80;
-    String path = "/";
-    int pathStart = urlStr.indexOf('/');
-    if(pathStart > 0) {
-        path = urlStr.substring(pathStart);
-        urlStr = urlStr.substring(0, pathStart);
-    }
-    int colonPos = urlStr.indexOf(':');
-    if(colonPos > 0) {
-        port = urlStr.substring(colonPos + 1).toInt();
-        host = urlStr.substring(0, colonPos);
-    } else {
-        host = urlStr;
-    }
-
-    D_printf("[OTA] Host: %s, Port: %d, Path: %s (HTTPS: %d)", host.c_str(), port, path.c_str(), useHttps);
-
+    const bool useHttps = url.startsWith("https://");
     WiFiClientSecure secureClient;
     WiFiClient plainClient;
-    Client* clientPtr;
+    HTTPClient http;
+
+    bool beginOk = false;
     if(useHttps) {
-        secureClient.setInsecure(); // skip cert check — acceptable for OTA on embedded device
-        clientPtr = &secureClient;
+        secureClient.setInsecure();
+        beginOk = http.begin(secureClient, url);
     } else {
-        clientPtr = &plainClient;
+        beginOk = http.begin(plainClient, url);
     }
-    clientPtr->setTimeout(30);
-    if(!clientPtr->connect(host.c_str(), port)) {
-        D_println("[OTA] Connection failed");
+
+    if(!beginOk) {
+        D_println("[OTA] HTTP begin failed");
         return false;
     }
 
-    clientPtr->printf("GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", path.c_str(), host.c_str());
+    http.setTimeout(30000);
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
 
-    // Read HTTP response headers
-    int contentLength = -1;
-    int httpCode = 0;
-    unsigned long headerTimeout = millis();
-    while(clientPtr->connected() && millis() - headerTimeout < 10000) {
-        if(!clientPtr->available()) { delay(1); continue; }
-        String line = clientPtr->readStringUntil('\n');
-        line.trim();
-        if(line.startsWith("HTTP/")) httpCode = line.substring(9, 12).toInt();
-        if(line.startsWith("Content-Length:")) contentLength = line.substring(16).toInt();
-        if(line.length() == 0) break;
-    }
-
-    if(httpCode != 200) {
-        D_printf("[OTA] HTTP error: %d", httpCode);
-        clientPtr->stop();
+    int httpCode = http.GET();
+    D_printf("[OTA] HTTP response code: %d", httpCode);
+    if(httpCode != HTTP_CODE_OK) {
+        D_printf("[OTA] HTTP GET failed, code: %d", httpCode);
+        http.end();
         return false;
     }
 
-    int updateSize = contentLength > 0 ? contentLength : UPDATE_SIZE_UNKNOWN;
-    if(!Update.begin(updateSize)) {
+    int contentLength = http.getSize();
+    if(contentLength <= 0) {
+        D_println("[OTA] Unknown content length, using chunked/stream mode");
+        contentLength = UPDATE_SIZE_UNKNOWN;
+    }
+
+    if(!Update.begin(contentLength)) {
         D_println("[OTA] Not enough space for OTA");
         Update.printError(Serial);
-        clientPtr->stop();
+        http.end();
         return false;
     }
 
@@ -122,19 +97,20 @@ bool downloadAndFlashFirmware(const String& url) {
     drawOTAPopup();
     u8g2_current->sendBuffer();
 
+    WiFiClient* stream = http.getStreamPtr();
     uint8_t buf[1024];
     int written = 0;
     unsigned long lastDisplayUpdate = millis();
     int8_t lastDisplayedPercent = 0;
-    while(clientPtr->connected() || clientPtr->available()) {
-        size_t available = clientPtr->available();
+    while(http.connected() && (contentLength == UPDATE_SIZE_UNKNOWN || written < contentLength)) {
+        size_t available = stream->available();
         if(available) {
-            int readBytes = clientPtr->readBytes(buf, min(available, sizeof(buf)));
+            int readBytes = stream->readBytes(buf, min(available, sizeof(buf)));
             if(Update.write(buf, readBytes) != (size_t)readBytes) {
                 D_println("[OTA] Write failed!");
                 Update.printError(Serial);
                 otaDownloadPercent = -1;
-                clientPtr->stop();
+                http.end();
                 return false;
             }
             written += readBytes;
@@ -160,7 +136,7 @@ bool downloadAndFlashFirmware(const String& url) {
         delay(1);
     }
     D_printf("[OTA] Download complete, %d bytes written", written);
-    clientPtr->stop();
+    http.end();
     if(Update.end(true)) {
         otaDownloadPercent = 100;
         D_printf("[OTA] Success! %d bytes. Rebooting...", written);
