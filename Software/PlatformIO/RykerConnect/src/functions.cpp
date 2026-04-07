@@ -107,6 +107,7 @@ void runTimers(){
       uint16_t adcHigh = sEEPROM.auto_brightness_adc_high;
       if(adcHigh <= adcLow){ adcLow = AUTO_BRIGHTNESS_ADC_LOW_DEFAULT; adcHigh = AUTO_BRIGHTNESS_ADC_HIGH_DEFAULT; }
       uint8_t brightness = map(constrain((int)smoothedLightLevel, adcLow, adcHigh), adcLow, adcHigh, AUTO_BRIGHTNESS_MIN, AUTO_BRIGHTNESS_MAX);
+        currentDisplayContrast = brightness;
       u8g2_0.setContrast(brightness);
       u8g2_1.setContrast(brightness);
   }

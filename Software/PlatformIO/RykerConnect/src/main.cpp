@@ -186,6 +186,7 @@ void setup() {
   if(!valiade_eeprom()){
     reset_settings();
   }
+    currentDisplayContrast = sEEPROM.display_brightness;
   u8g2_0.setContrast(sEEPROM.display_brightness);
   u8g2_1.setContrast(sEEPROM.display_brightness);
   batteryIconSelection = sEEPROM.battery_icon_first;
@@ -262,6 +263,10 @@ void loop() {
         break;
     default:
         defaultScreen();
+  }
+
+  if(dualPassEnabled){
+    dualPassFrame = 1 - dualPassFrame;
   }
 
   //int lightSensorReading = 0;

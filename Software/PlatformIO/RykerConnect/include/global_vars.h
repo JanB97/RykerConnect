@@ -193,6 +193,10 @@ extern unsigned long previousVolumeMillis;
 #define AUTO_BRIGHTNESS_MAX 255
 extern unsigned long previousAutoBrightnessMillis;
 extern float smoothedLightLevel;
+extern uint8_t currentDisplayContrast;
+extern uint8_t popupDimPercent;
+extern bool dualPassEnabled;
+extern uint8_t dualPassFrame;
 #pragma endregion
 
 #pragma region BLE Watchdog

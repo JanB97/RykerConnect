@@ -166,6 +166,7 @@ void setDisplayBrightnessCallback(uint8_t brightness)
 {
     D_println(" Brightness Characteristic!");
     D_printf(" Screen Brightness: %i", brightness);
+    currentDisplayContrast = brightness;
     u8g2_0.setContrast(brightness);
     u8g2_1.setContrast(brightness);
 }
@@ -213,6 +214,11 @@ void handleSettingsCallback(const uint8_t* data, uint8_t size){
 
             sEEPROM.adaptive_brightness = (bool)data[0];
             sEEPROM.display_brightness = (uint8_t)data[1];
+            if(!sEEPROM.adaptive_brightness){
+                currentDisplayContrast = sEEPROM.display_brightness;
+                u8g2_0.setContrast(currentDisplayContrast);
+                u8g2_1.setContrast(currentDisplayContrast);
+            }
             uint16_t new_adc_low  = (uint16_t)(data[2]) | ((uint16_t)(data[3]) << 8);
             uint16_t new_adc_high = (uint16_t)(data[4]) | ((uint16_t)(data[5]) << 8);
             if(new_adc_high > 0 && new_adc_high > new_adc_low){

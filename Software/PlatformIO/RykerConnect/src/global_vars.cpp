@@ -107,6 +107,10 @@ unsigned long previousVolumeMillis = 0;
 #pragma region Auto-Brightness
 unsigned long previousAutoBrightnessMillis = 0;
 float smoothedLightLevel = -1;
+uint8_t currentDisplayContrast = DISPLAY_BRIGHTNESS;
+uint8_t popupDimPercent = 60;
+bool dualPassEnabled = true;
+uint8_t dualPassFrame = 0;
 #pragma endregion
 
 #pragma region BLE Watchdog
