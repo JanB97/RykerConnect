@@ -244,6 +244,15 @@ void loop() {
   esp_task_wdt_reset();
   runTimers();
 
+  #ifdef DEBUG
+  fps_counter++;
+  if (millis() - fps_last_ms >= 1000) {
+    fps_value = fps_counter;
+    fps_counter = 0;
+    fps_last_ms = millis();
+  }
+  #endif
+
   switch(screenToDisplay){
     case 1:
         mediaScreen();

@@ -8,7 +8,7 @@
 #include <mcp9808.h>
 #include <freertos/semphr.h>
 
-//#define DEBUG
+#define DEBUG
 #define SPLASHSCREEN
 
 #define VERSION 0x0007
@@ -219,6 +219,9 @@ extern bool lowBatteryTriggeredIntercom;
     #define D_printlnV(x)  D_printV(x); Serial.println ();
     #define D_delay(x) delay(x);
     extern unsigned long dbg_start, dbg_end;
+    extern uint16_t fps_counter;
+    extern uint16_t fps_value;
+    extern unsigned long fps_last_ms;
     #else
     #define D_begin(...)
     #define D_flush()

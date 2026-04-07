@@ -124,4 +124,7 @@ bool lowBatteryTriggeredIntercom = false;
 
 #ifdef DEBUG
     unsigned long dbg_start = 0, dbg_end = 0;
+    uint16_t fps_counter = 0;
+    uint16_t fps_value = 0;
+    unsigned long fps_last_ms = 0;
 #endif

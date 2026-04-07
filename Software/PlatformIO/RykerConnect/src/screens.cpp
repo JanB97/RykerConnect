@@ -107,6 +107,14 @@ void mediaScreen()
 }
 
 void drawPopups(){
+  #ifdef DEBUG
+  {
+    char fpsBuf[8];
+    snprintf(fpsBuf, sizeof(fpsBuf), "%uFPS", fps_value);
+    u8g2_current->setFont(u8g2_font_profont10_tf);
+    u8g2_current->drawStr(OLED_WIDTH/2 - u8g2_current->getStrWidth(fpsBuf) - 1, 30, fpsBuf);
+  }
+  #endif
   if(notificationDisplayed){
     String localType, localTitle, localText;
     if(xSemaphoreTake(dataMutex, pdMS_TO_TICKS(50)) == pdTRUE){
