@@ -154,7 +154,7 @@ bool downloadAndFlashFirmware(const String& url) {
 
 void setup() {
   // put your setup code here, to run once:
-  D_begin(115200);
+  D_begin(460800);
 
   initDisplays();
 

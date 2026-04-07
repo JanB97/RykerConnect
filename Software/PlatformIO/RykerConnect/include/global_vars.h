@@ -11,7 +11,7 @@
 //#define DEBUG
 #define SPLASHSCREEN
 
-#define VERSION 0x0006
+#define VERSION 0x0007
 #define HARDWARE_VERSION "ESP32S3-REV01"
 
 #define OLED_WIDTH 320

@@ -1,3 +1,6 @@
+V00.07 (07.04.2026):
+- fix automatic OTA update not working after code optimizations of V00.06
+
 V00.06 (06.04.2026):
 - optimize firmware size
 - add volume popup
