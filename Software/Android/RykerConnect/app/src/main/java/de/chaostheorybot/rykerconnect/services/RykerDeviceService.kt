@@ -39,6 +39,9 @@ class RykerDeviceService : CompanionDeviceService() {
     private var volumeMonitor: VolumeMonitor? = null
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    /** Job for delayed cleanup – allows cancellation if device reappears quickly. */
+    private var cleanupJob: Job? = null
+
     override fun onCreate() {
         super.onCreate()
         Log.d("RykerDeviceService", "Service created")
@@ -87,6 +90,11 @@ class RykerDeviceService : CompanionDeviceService() {
             Log.w("RykerDeviceService", "BLUETOOTH_CONNECT nicht erteilt, Verbindung abgebrochen")
             return
         }
+
+        // Cancel any pending delayed cleanup – device (re-)appeared
+        cleanupJob?.cancel()
+        cleanupJob = null
+
         val store = RykerConnectStore(this)
         
         try {
@@ -95,6 +103,17 @@ class RykerDeviceService : CompanionDeviceService() {
 
         serviceScope.launch {
             store.saveBLEAppear(true)
+
+            // Guard: if already connected, just re-sync instead of creating a duplicate connection
+            val existing = RykerConnectApplication.activeConnection.value
+            if (existing?.isConnected?.value == true) {
+                Log.d("RykerDeviceService", "Already connected, re-syncing instead of creating new connection")
+                existing.syncAll()
+                return@launch
+            }
+
+            // Disconnect orphaned old connection before creating a new one
+            existing?.disconnect()
 
             // Read service toggles
             val musicEnabled = store.isMusicEnabled()
@@ -200,11 +219,34 @@ class RykerDeviceService : CompanionDeviceService() {
     }
 
     @Deprecated("Legacy")
-    override fun onDeviceDisappeared(address: String) { cleanup() }
+    override fun onDeviceDisappeared(address: String) { scheduleCleanup("onDeviceDisappeared($address)") }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     @Deprecated("Legacy override", replaceWith = ReplaceWith(""))
-    override fun onDeviceDisappeared(info: AssociationInfo) { cleanup() }
+    override fun onDeviceDisappeared(info: AssociationInfo) { scheduleCleanup("onDeviceDisappeared(${info.deviceMacAddress})") }
+
+    /**
+     * Debounced cleanup: the CompanionDeviceManager sometimes fires spurious
+     * onDeviceDisappeared callbacks (e.g. when startObservingDevicePresence is
+     * called again while the device is still present).  We delay 3 s and check
+     * whether the BLE connection is actually down before tearing everything down.
+     * An intervening onDeviceAppeared call cancels the pending cleanup.
+     */
+    private fun scheduleCleanup(tag: String) {
+        Log.d("RykerDeviceService", "$tag – scheduling delayed cleanup (3 s)")
+        cleanupJob?.cancel()
+        cleanupJob = serviceScope.launch {
+            delay(3000)
+            // Only clean up if the BLE connection is actually gone
+            val conn = RykerConnectApplication.activeConnection.value
+            if (conn == null || !conn.isConnected.value) {
+                Log.d("RykerDeviceService", "$tag – device still disconnected after delay, performing cleanup")
+                withContext(Dispatchers.Main) { cleanup() }
+            } else {
+                Log.d("RykerDeviceService", "$tag – device still connected, skipping cleanup")
+            }
+        }
+    }
 
     private fun cleanup() {
         serviceScope.launch { RykerConnectStore(this@RykerDeviceService).saveBLEAppear(false) }

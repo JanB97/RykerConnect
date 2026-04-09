@@ -52,7 +52,7 @@ private enum class ActiveOverlay { UPDATE, SERVICE, INTERCOM, SETTINGS }
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
-               store: RykerConnectStore, companion: () -> Unit ) {
+               store: RykerConnectStore, companion: () -> Unit, reselect: () -> Unit ) {
 
     val intercomConnected = store.getInterComConnectedToken.collectAsState(initial = false)
     viewModel.updateIntercomConnected(intercomConnected.value)
@@ -253,6 +253,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                         MainUnitCard(
                             mainUnitDrawable = viewModel.getRykerDrawable(),
                             companion = companion,
+                            reselect = reselect,
                             isAssociated = isAssociated,
                             isConnected = isBleConnected,
                             onNavigateToUpdate = { fromBanner ->

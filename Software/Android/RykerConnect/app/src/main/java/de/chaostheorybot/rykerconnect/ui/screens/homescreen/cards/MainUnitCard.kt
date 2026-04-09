@@ -1,9 +1,6 @@
 package de.chaostheorybot.rykerconnect.ui.screens.homescreen.cards
 
-import android.companion.CompanionDeviceManager
-import android.content.Context
 import android.graphics.drawable.AnimationDrawable
-import android.util.Log
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
@@ -31,23 +28,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.times
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import de.chaostheorybot.rykerconnect.R
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
-import de.chaostheorybot.rykerconnect.data.RykerConnectStore
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun MainUnitCard(
     mainUnitDrawable: AnimationDrawable,
     companion: () -> Unit,
+    reselect: () -> Unit,
     isAssociated: Boolean,
     isConnected: Boolean,
     onNavigateToUpdate: (fromBanner: Boolean) -> Unit,
@@ -61,8 +54,6 @@ fun MainUnitCard(
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
 
-    val context = LocalContext.current
-    val store = RykerConnectStore(context)
     val configuration = LocalConfiguration.current
     val dpHeight = configuration.screenHeightDp.toFloat()
 
@@ -211,25 +202,7 @@ fun MainUnitCard(
                 FilledTonalButton(
                     onClick = {
                         if (isAssociated) {
-                            CoroutineScope(Dispatchers.Main).launch {
-                                try {
-                                    val deviceManager = context.getSystemService(Context.COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
-                                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                                        deviceManager.myAssociations.forEach { deviceManager.disassociate(it.id) }
-                                    } else {
-                                        @Suppress("DEPRECATION")
-                                        deviceManager.associations.forEach { deviceManager.disassociate(it) }
-                                    }
-                                    store.saveBLEMAC("")
-                                    RykerConnectApplication.activeConnection.value?.disconnect()
-                                    RykerConnectApplication.activeConnection.value = null
-                                    // companion() wird NICHT sofort aufgerufen: der ESP braucht nach dem
-                                    // Trennen etwas Zeit, um BLE-Advertising neu zu starten. Der User
-                                    // sieht den "Select Device"-Button und kann ihn drücken, wenn bereit.
-                                } catch (e: Exception) {
-                                    Log.e("MainUnitCard", "Disassociate failed: ${e.message}")
-                                }
-                            }
+                            reselect()
                         } else {
                             companion()
                         }

@@ -1,3 +1,6 @@
+V1.3.1:
+- bluetooth stability improvements.
+
 V1.3.0:
 - support Firmware V00.06 features and protocol changes
 - new Design for Settings pages
