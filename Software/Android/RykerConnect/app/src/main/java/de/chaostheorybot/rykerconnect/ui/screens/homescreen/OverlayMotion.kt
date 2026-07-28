@@ -41,16 +41,16 @@ internal fun Modifier.predictiveBackPeek(
     val p = progress().coerceIn(0f, 1f)
     if (p == 0f) return@graphicsLayer
 
-    // Kraeftig genug, damit im dunklen Theme wirklich etwas vom Startbildschirm
-    // durchkommt - bei 10 % war der Rand zu schmal, um etwas zu erkennen.
-    val scale = 1f - 0.18f * p
+    // Dezent gehalten: hinter dem Overlay liegt der Fensterhintergrund, kein Inhalt.
+    // Ein staerkeres Schrumpfen wuerde nur eine grosse schwarze Flaeche freilegen.
+    val scale = 1f - 0.10f * p
     scaleX = scale
     scaleY = scale
 
     // Weg von der Kante, an der gewischt wird - wie die Systemanimation.
-    val shift = size.width * 0.06f * p
+    val shift = size.width * 0.05f * p
     translationX = if (swipeEdge() == BackEventCompat.EDGE_LEFT) shift else -shift
 
-    shape = RoundedCornerShape(32.dp * p)
+    shape = RoundedCornerShape(28.dp * p)
     clip = true
 }

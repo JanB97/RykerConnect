@@ -272,9 +272,10 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(),
 
         // ── Main content ────────────────────────────────────────────────
         AnimatedVisibility(
-            // Waehrend der Zurueckgeste mitkomponieren, damit hinter dem schrumpfenden
-            // Overlay der Startbildschirm sichtbar wird statt schwarzer Flaeche.
-            visible = activeOverlay == null || backProgress > 0f,
+            // Bewusst NICHT waehrend der Zurueckgeste mitkomponieren: dann waeren die
+            // sharedBounds-Schluessel auf beiden Flaechen gleichzeitig aktiv und die
+            // Grenzen wuerden zwischen Karte und Overlay hin- und herspringen.
+            visible = activeOverlay == null,
             enter = fadeIn(),
             exit = fadeOut()
         ) {
