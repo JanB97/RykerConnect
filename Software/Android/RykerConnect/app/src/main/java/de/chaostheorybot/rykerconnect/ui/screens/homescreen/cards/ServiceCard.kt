@@ -6,6 +6,9 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
@@ -99,7 +102,11 @@ fun ServiceCard(
                         // und der Uebergang kann nichts interpolieren.
                         .sharedBounds(
                             sharedContentState = rememberSharedContentState("service-bounds"),
-                            animatedVisibilityScope = animatedVisibilityScope
+                            animatedVisibilityScope = animatedVisibilityScope,
+                            // Button-Beschriftung frueh und weich ausblenden, sonst steht sie
+                            // hart im wachsenden Container.
+                            exit = fadeOut(tween(180)),
+                            enter = fadeIn(tween(200, delayMillis = 220))
                         )
                         .fillMaxWidth()
                         .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)

@@ -383,7 +383,11 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                 modifier = Modifier
                     .sharedBounds(
                         sharedContentState = rememberSharedContentState("service-bounds"),
-                        animatedVisibilityScope = this@AnimatedVisibility
+                        animatedVisibilityScope = this@AnimatedVisibility,
+                        // Inhalt verzoegert und laenger einblenden, waehrend die Flaeche
+                        // aufzieht. Mit dem Default steht der Screen sofort scharf da.
+                        enter = fadeIn(tween(340, delayMillis = 110)),
+                        exit = fadeOut(tween(200))
                     )
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surface)
