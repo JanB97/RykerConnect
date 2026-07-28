@@ -3,39 +3,42 @@ package de.chaostheorybot.rykerconnect.services
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.BatteryManager
 import android.util.Log
-import de.chaostheorybot.rykerconnect.RykerConnectApplication
+import de.chaostheorybot.rykerconnect.logic.parseBatteryState
+import de.chaostheorybot.rykerconnect.logic.pushPhoneBattery
 
+/**
+ * Meldet den Telefonakku an die Haupteinheit. Welche Broadcasts hier ankommen, haengt vom
+ * in den Service-Einstellungen gewaehlten Modus ab
+ * (siehe [de.chaostheorybot.rykerconnect.data.setupChargeStateFilter]):
+ *
+ * - Wechsel-Modus (Standard): ACTION_POWER_CONNECTED/DISCONNECTED. Feuert nur beim
+ *   Ein- und Ausstecken, der Pegel kommt aus dem periodischen Poll im RykerDeviceService.
+ * - Changed-Modus: ACTION_BATTERY_CHANGED. Liefert jede Pegelaenderung sofort, weckt den
+ *   Prozess dafuer beim Laden im Sekundentakt.
+ */
 class ChargeStateReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        if (intent?.action == Intent.ACTION_BATTERY_CHANGED) {
-            val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
-            val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
-            val batteryPct = if (level != -1 && scale != -1) (level * 100 / scale) else -1
-            
-            val status = intent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
-            val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING || 
-                             status == BatteryManager.BATTERY_STATUS_FULL
+        when (intent?.action) {
+            // force: der Wechsel muss raus, auch wenn der Pegel gleich geblieben ist.
+            Intent.ACTION_POWER_CONNECTED ->
+                logSent(true, pushPhoneBattery(context, force = true, forcedCharging = true))
 
-            if (batteryPct != -1 && (RykerConnectApplication.phoneBatteryLevel != batteryPct || 
-                RykerConnectApplication.phoneBatteryCharging != isCharging)) {
-                
-                RykerConnectApplication.phoneBatteryLevel = batteryPct
-                RykerConnectApplication.phoneBatteryCharging = isCharging
-                
-                Log.d("ChargeStateReceiver", "Battery changed: $batteryPct%, charging: $isCharging")
-                
-                // BLEDeviceConnection handles connection checks and retries internally now
-                RykerConnectApplication.activeConnection.value?.let { connection ->
-                    if (connection.isConnected.value) {
-                        connection.writePhoneBattery(level = batteryPct, status = isCharging)
-                    } else {
-                        Log.v("ChargeStateReceiver", "Device not connected, skipping update")
-                        // RykerDeviceService or CompanionDeviceService should handle reconnection
-                    }
+            Intent.ACTION_POWER_DISCONNECTED ->
+                logSent(false, pushPhoneBattery(context, force = true, forcedCharging = false))
+
+            Intent.ACTION_BATTERY_CHANGED -> {
+                // Zustand aus dem zugestellten Intent nehmen statt erneut sticky zu lesen.
+                val state = parseBatteryState(intent) ?: return
+                // Ohne force: sendet nur, wenn sich Pegel oder Ladezustand geaendert haben.
+                if (pushPhoneBattery(context, state = state)) {
+                    Log.d("ChargeStateReceiver", "Akku ${state.first}%, laedt: ${state.second}")
                 }
             }
         }
+    }
+
+    private fun logSent(charging: Boolean, sent: Boolean) {
+        Log.d("ChargeStateReceiver", "Ladezustand: $charging, ueber BLE gesendet: $sent")
     }
 }

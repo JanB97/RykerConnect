@@ -25,7 +25,7 @@ class YouTubeMusicManager(private val context: Context) {
     private val handler = Handler(Looper.getMainLooper())
     
     private val managerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private var pollingJob: Job? = null
+    private var discoveryJob: Job? = null
 
     private val sessionListener = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
         Log.d("YouTubeMusicManager", "Active sessions changed, total: ${controllers?.size}")
@@ -38,6 +38,13 @@ class YouTubeMusicManager(private val context: Context) {
 
     object Constants {
         const val YOUTUBE_MUSIC_PACKAGE_NAME = "com.google.android.apps.youtube.music"
+
+        /**
+         * Nachlauf fuer die Session-Suche. Danach uebernimmt allein der
+         * OnActiveSessionsChangedListener - kein Dauer-Polling.
+         */
+        const val DISCOVERY_ATTEMPTS = 12
+        const val DISCOVERY_INTERVAL_MS = 5_000L
     }
 
     private fun createYoutubeMusicListener(): YouTubeMusicListener {
@@ -100,24 +107,36 @@ class YouTubeMusicManager(private val context: Context) {
             val componentName = ComponentName(context, NotificationListener::class.java)
             mediaSessionManager.removeOnActiveSessionsChangedListener(sessionListener)
             mediaSessionManager.addOnActiveSessionsChangedListener(sessionListener, componentName)
-            
-            startSessionPolling()
+
+            startSessionDiscovery(componentName)
         } catch (e: Exception) {
             Log.e("YouTubeMusicManager", "Error setting up session listener: ${e.message}")
         }
     }
 
-    private fun startSessionPolling() {
-        pollingJob?.cancel()
-        pollingJob = managerScope.launch {
-            while (isActive) {
-                withContext(Dispatchers.Main) {
-                    val componentName = ComponentName(context, NotificationListener::class.java)
-                    val controllers = mediaSessionManager.getActiveSessions(componentName)
-                    updateController(controllers)
+    /**
+     * Sucht die YouTube-Music-Session.
+     *
+     * Der Listener meldet nur *Aenderungen* an der Session-Liste. Lief YT Music schon,
+     * bevor wir uns registriert haben, bleibt er stumm - deshalb einmal aktiv nachsehen.
+     * Der Nachlauf deckt den Fall ab, dass die Session verzoegert erscheint, und endet,
+     * sobald sie gefunden ist. Danach laeuft alles ueber den Callback.
+     */
+    private fun startSessionDiscovery(componentName: ComponentName) {
+        discoveryJob?.cancel()
+        discoveryJob = managerScope.launch {
+            repeat(Constants.DISCOVERY_ATTEMPTS) {
+                val found = withContext(Dispatchers.Main) {
+                    updateController(mediaSessionManager.getActiveSessions(componentName))
+                    youTubeMusicController != null
                 }
-                delay(5000) // Alle 5 Sekunden prüfen, ob die Session jetzt da ist
+                if (found) {
+                    Log.d("YouTubeMusicManager", "Session gefunden, Suche beendet")
+                    return@launch
+                }
+                delay(Constants.DISCOVERY_INTERVAL_MS)
             }
+            Log.d("YouTubeMusicManager", "Keine Session gefunden, ab jetzt nur noch per Listener")
         }
     }
 
@@ -162,7 +181,7 @@ class YouTubeMusicManager(private val context: Context) {
 
     fun destroy() {
         try {
-            pollingJob?.cancel()
+            discoveryJob?.cancel()
             managerScope.cancel()
             mediaSessionManager.removeOnActiveSessionsChangedListener(sessionListener)
             youTubeMusicController?.let { ctrl ->

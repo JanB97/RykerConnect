@@ -24,13 +24,22 @@ fun setupSpotifyFilter(): IntentFilter{
 }
 
 
-fun setupChargeStateFilter(): IntentFilter{
+/**
+ * Filter fuer die Ladezustands-Erfassung, abhaengig von der Einstellung im Service-Menue.
+ *
+ * @param useBatteryChanged true abonniert ACTION_BATTERY_CHANGED - jede Pegelaenderung
+ *   kommt sofort an, weckt den Prozess beim Laden aber im Sekundentakt.
+ *   false abonniert nur die Steck-Ereignisse; der Pegel wird periodisch aus dem
+ *   Sticky-Broadcast gelesen (siehe [de.chaostheorybot.rykerconnect.logic.readPhoneBattery]).
+ */
+fun setupChargeStateFilter(useBatteryChanged: Boolean = false): IntentFilter{
     val chargeStateFilter = IntentFilter()
-    chargeStateFilter.addAction(Intent.ACTION_BATTERY_CHANGED)
-    //chargeStateFilter.addAction(Intent.ACTION_BATTERY_LOW)
-    //chargeStateFilter.addAction(Intent.ACTION_BATTERY_OKAY)
-    //chargeStateFilter.addAction(Intent.ACTION_POWER_CONNECTED)
-    //chargeStateFilter.addAction(Intent.ACTION_POWER_DISCONNECTED)
+    if (useBatteryChanged) {
+        chargeStateFilter.addAction(Intent.ACTION_BATTERY_CHANGED)
+    } else {
+        chargeStateFilter.addAction(Intent.ACTION_POWER_CONNECTED)
+        chargeStateFilter.addAction(Intent.ACTION_POWER_DISCONNECTED)
+    }
     return chargeStateFilter
 }
 

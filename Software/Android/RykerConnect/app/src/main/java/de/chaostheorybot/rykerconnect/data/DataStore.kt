@@ -43,6 +43,10 @@ class RykerConnectStore(private val context: Context) {
         private val DYNAMIC_COLOR_TOKEN = booleanPreferencesKey("dynamic_color")
         private val SHOW_DEBUG_CARD_TOKEN = booleanPreferencesKey("show_debug_card")
 
+        // Ladezustands-Erfassung
+        private val USE_BATTERY_CHANGED_TOKEN = booleanPreferencesKey("use_battery_changed_receiver")
+        private val BATTERY_POLL_SECONDS_TOKEN = intPreferencesKey("battery_poll_seconds")
+
         private fun decodeMacs(stored: String?, legacy: String?): List<String> =
             decodeIntercomMacs(stored, legacy)
 
@@ -84,6 +88,11 @@ class RykerConnectStore(private val context: Context) {
     }
     val getDynamicColorToken: Flow<Boolean> = context.dataStore.data.map { it[DYNAMIC_COLOR_TOKEN] ?: true }
     val getShowDebugCardToken: Flow<Boolean> = context.dataStore.data.map { it[SHOW_DEBUG_CARD_TOKEN] ?: true }
+    val getUseBatteryChangedToken: Flow<Boolean> = context.dataStore.data.map { it[USE_BATTERY_CHANGED_TOKEN] ?: false }
+    val getBatteryPollSecondsToken: Flow<Int> = context.dataStore.data.map {
+        (it[BATTERY_POLL_SECONDS_TOKEN] ?: BATTERY_POLL_DEFAULT_SECONDS)
+            .coerceIn(BATTERY_POLL_MIN_SECONDS, BATTERY_POLL_MAX_SECONDS)
+    }
     val getMusicPlayerToken: Flow<MusicService> = context.dataStore.data.map { pref ->
         MusicService.fromId(pref[MUSIC_PLAYER_TOKEN] ?: 0) ?: MusicService.SPOTIFY 
     }
@@ -177,9 +186,22 @@ class RykerConnectStore(private val context: Context) {
 
     suspend fun saveDynamicColor(value: Boolean) { context.dataStore.edit { it[DYNAMIC_COLOR_TOKEN] = value } }
     suspend fun saveShowDebugCard(value: Boolean) { context.dataStore.edit { it[SHOW_DEBUG_CARD_TOKEN] = value } }
+    suspend fun saveUseBatteryChanged(value: Boolean) { context.dataStore.edit { it[USE_BATTERY_CHANGED_TOKEN] = value } }
+    suspend fun saveBatteryPollSeconds(value: Int) {
+        context.dataStore.edit {
+            it[BATTERY_POLL_SECONDS_TOKEN] = value.coerceIn(BATTERY_POLL_MIN_SECONDS, BATTERY_POLL_MAX_SECONDS)
+        }
+    }
     suspend fun getMusicPlayer(): MusicService? = MusicService.fromId(context.dataStore.data.first()[MUSIC_PLAYER_TOKEN] ?: 0)
     suspend fun saveMusicPlayer(service: MusicService) { context.dataStore.edit { it[MUSIC_PLAYER_TOKEN] = service.id } }
 }
+
+/** Grenzen fuer das Abfrageintervall des Telefonakkus (30 s bis 10 min). */
+const val BATTERY_POLL_MIN_SECONDS = 30
+const val BATTERY_POLL_MAX_SECONDS = 600
+const val BATTERY_POLL_DEFAULT_SECONDS = 60
+/** Schrittweite des Reglers und damit der erlaubten Werte. */
+const val BATTERY_POLL_STEP_SECONDS = 30
 
 internal const val INTERCOM_MAC_SEPARATOR = ";"
 

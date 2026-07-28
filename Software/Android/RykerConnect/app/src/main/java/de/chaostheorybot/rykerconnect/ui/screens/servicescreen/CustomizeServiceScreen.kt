@@ -3,6 +3,7 @@ package de.chaostheorybot.rykerconnect.ui.screens.servicescreen
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,17 +26,25 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import de.chaostheorybot.rykerconnect.data.BATTERY_POLL_DEFAULT_SECONDS
+import de.chaostheorybot.rykerconnect.data.BATTERY_POLL_MAX_SECONDS
+import de.chaostheorybot.rykerconnect.data.BATTERY_POLL_MIN_SECONDS
+import de.chaostheorybot.rykerconnect.data.BATTERY_POLL_STEP_SECONDS
 import de.chaostheorybot.rykerconnect.data.MusicService
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import kotlinx.coroutines.launch
@@ -48,6 +57,8 @@ fun CustomizeServiceScreen(onBack: () -> Unit, store: RykerConnectStore) {
     val musicEnabled by store.getMusicEnabled.collectAsState(initial = true)
     val volumeEnabled by store.getVolumeEnabled.collectAsState(initial = true)
     val intercomBatteryEnabled by store.getIntercomBatteryEnabled.collectAsState(initial = true)
+    val useBatteryChanged by store.getUseBatteryChangedToken.collectAsState(initial = false)
+    val pollSeconds by store.getBatteryPollSecondsToken.collectAsState(initial = BATTERY_POLL_DEFAULT_SECONDS)
     val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
@@ -134,8 +145,111 @@ fun CustomizeServiceScreen(onBack: () -> Unit, store: RykerConnectStore) {
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
+            ChargeStateSelection(
+                useBatteryChanged = useBatteryChanged,
+                pollSeconds = pollSeconds,
+                onModeSelected = { value -> coroutineScope.launch { store.saveUseBatteryChanged(value) } },
+                onPollSecondsSelected = { value -> coroutineScope.launch { store.saveBatteryPollSeconds(value) } }
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
             Text(
                 "Changes take effect after next reconnect.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * Wahl, wie der Ladezustand des Telefons erfasst wird, plus Abfrageintervall.
+ */
+@Composable
+fun ChargeStateSelection(
+    useBatteryChanged: Boolean,
+    pollSeconds: Int,
+    onModeSelected: (Boolean) -> Unit,
+    onPollSecondsSelected: (Int) -> Unit
+) {
+    Column(modifier = Modifier.padding(16.dp)) {
+        Text("Ladezustand des Telefons:")
+
+        ChargeStateOption(
+            title = "Nur bei Wechsel (empfohlen)",
+            subtitle = "Ein- und Ausstecken geht sofort raus. Der Akkustand wird im " +
+                    "eingestellten Takt gelesen. Weckt die App deutlich seltener.",
+            isSelected = !useBatteryChanged,
+            onSelect = { onModeSelected(false) }
+        )
+        ChargeStateOption(
+            title = "Bei jeder Aenderung",
+            subtitle = "Systemmeldung fuer jede Akku-Aenderung. Der Stand ist damit " +
+                    "sekundengenau, weckt die App beim Laden aber staendig.",
+            isSelected = useBatteryChanged,
+            onSelect = { onModeSelected(true) }
+        )
+
+        // Das Intervall gilt nur, wenn nicht die Systemmeldung den Stand liefert.
+        if (!useBatteryChanged) {
+            var sliderValue by remember(pollSeconds) { mutableFloatStateOf(pollSeconds.toFloat()) }
+            val steps = (BATTERY_POLL_MAX_SECONDS - BATTERY_POLL_MIN_SECONDS) / BATTERY_POLL_STEP_SECONDS - 1
+
+            Text(
+                text = "Abfrageintervall: ${formatPollInterval(sliderValue.toInt())}",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 16.dp, start = 8.dp)
+            )
+            Slider(
+                value = sliderValue,
+                onValueChange = { sliderValue = it },
+                // Erst beim Loslassen speichern, sonst schreibt jeder Pixel in DataStore.
+                onValueChangeFinished = { onPollSecondsSelected(sliderValue.toInt()) },
+                valueRange = BATTERY_POLL_MIN_SECONDS.toFloat()..BATTERY_POLL_MAX_SECONDS.toFloat(),
+                steps = steps,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = formatPollInterval(BATTERY_POLL_MIN_SECONDS),
+                    style = MaterialTheme.typography.labelSmall
+                )
+                Text(
+                    text = formatPollInterval(BATTERY_POLL_MAX_SECONDS),
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
+    }
+}
+
+/** Formatiert Sekunden als "30 s", "5 min" oder "1:30 min". */
+private fun formatPollInterval(seconds: Int): String = when {
+    seconds < 60 -> "$seconds s"
+    seconds % 60 == 0 -> "${seconds / 60} min"
+    else -> "${seconds / 60}:${(seconds % 60).toString().padStart(2, '0')} min"
+}
+
+@Composable
+fun ChargeStateOption(title: String, subtitle: String, isSelected: Boolean, onSelect: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSelect() }
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        RadioButton(selected = isSelected, onClick = onSelect)
+        Column(modifier = Modifier.padding(start = 8.dp, top = 12.dp)) {
+            Text(text = title, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
