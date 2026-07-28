@@ -252,7 +252,14 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                     CenterAlignedTopAppBar(
                         title = { Text(text = stringResource(id = R.string.app_name), style = MaterialTheme.typography.headlineMedium) },
                         actions = {
-                            IconButton(onClick = { activeOverlay = ActiveOverlay.APP_SETTINGS }) {
+                            IconButton(
+                                onClick = { activeOverlay = ActiveOverlay.APP_SETTINGS },
+                                // Gegenstueck zum Overlay: das Zahnrad morpht in den Screen.
+                                modifier = Modifier.sharedBounds(
+                                    sharedContentState = rememberSharedContentState("app-settings-bounds"),
+                                    animatedVisibilityScope = this@AnimatedVisibility
+                                )
+                            ) {
                                 Icon(Icons.Filled.Settings, contentDescription = "App-Einstellungen")
                             }
                         },
@@ -550,6 +557,10 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .sharedBounds(
+                        sharedContentState = rememberSharedContentState("app-settings-bounds"),
+                        animatedVisibilityScope = this@AnimatedVisibility
+                    )
                     .background(MaterialTheme.colorScheme.surface)
             ) {
                 AppSettingsScreen(onBack = { activeOverlay = null }, store = store)
