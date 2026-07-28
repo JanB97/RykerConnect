@@ -60,7 +60,6 @@ fun IntercomCard(
     intercomConnected: Boolean,
     intercomBattery: Int,
     selectDeviceClick: () -> Unit,
-    setBatteryStatus: () -> Unit,
     intercomName: String,
     /** Anzahl ausgewaehlter Intercoms; ab 2 wird die Prioritaets-Zeile eingeblendet. */
     selectedCount: Int = 1,

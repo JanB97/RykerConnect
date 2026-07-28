@@ -11,6 +11,8 @@ import androidx.core.app.ActivityCompat
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import java.lang.reflect.Method
 
 
@@ -67,7 +69,7 @@ object BluetoothLogic {
         repeat(40) {
             val level = try { getBatteryLevel(device) } catch (_: Exception) { -1 }
             if (level >= 0) return level
-            delay(20)
+            delay(20.milliseconds)
         }
         return -1
     }
@@ -108,7 +110,7 @@ object BluetoothLogic {
                 val m: Method = it.javaClass.getMethod("isConnected")
                 m.invoke(it) as Boolean
             } ?: false
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             false
         }
     }
@@ -128,9 +130,9 @@ object BluetoothLogic {
         }
 
         // Wait up to 4 seconds for connection and services
-        return withTimeoutOrNull(4000) {
+        return withTimeoutOrNull(4.seconds) {
             while (!(connection.isConnected.value && connection.services.value.isNotEmpty())) {
-                delay(200)
+                delay(200.milliseconds)
             }
             true
         } ?: false

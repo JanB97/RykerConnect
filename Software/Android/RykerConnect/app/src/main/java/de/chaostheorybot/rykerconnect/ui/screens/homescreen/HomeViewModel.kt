@@ -83,13 +83,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application){
         refreshActiveIntercom()
     }
 
-    fun intercomClick(){
-        updateIntercomConnected(!intercomConnected)
-    }
-    fun mainUnitClick(){
-        updateMainUnitConnected(!mainUnitConnected)
-    }
-
     fun selBLDeviceClick(){
         pairedInterComDevices = getPairedDevices()
         pendingMacs.clear()

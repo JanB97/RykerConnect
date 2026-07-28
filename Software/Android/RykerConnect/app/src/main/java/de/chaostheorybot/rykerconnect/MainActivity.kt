@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
                             SetupScreen(nav = navController)
                         }
                         composable(route = Screen.HomeScreen.route) {
-                            HomeScreen(store = store, nav = navController, companion = { setupCompanion(store) }, reselect = { reselectDevice(store) })
+                            HomeScreen(store = store, companion = { setupCompanion(store) }, reselect = { reselectDevice(store) })
                         }
                     }
                 }

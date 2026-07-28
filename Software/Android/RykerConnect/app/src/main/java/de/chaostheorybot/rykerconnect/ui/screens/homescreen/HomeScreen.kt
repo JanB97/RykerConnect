@@ -42,7 +42,6 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavController
 import de.chaostheorybot.rykerconnect.R
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
@@ -56,6 +55,9 @@ import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.DeviceSettingsSc
 import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.FirmwareUpdateScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 /** Lange, gleichmaessige Kurve - ein 48-dp-Icon auf Vollbild braucht sichtbare Zeit. */
 private val AppSettingsBounds = BoundsTransform { _, _ ->
@@ -74,7 +76,7 @@ private enum class ActiveOverlay { UPDATE, SERVICE, INTERCOM, SETTINGS, APP_SETT
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
-fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
+fun HomeScreen(viewModel: HomeViewModel = viewModel(),
                store: RykerConnectStore, companion: () -> Unit, reselect: () -> Unit ) {
 
     val intercomConnected = store.getInterComConnectedToken.collectAsState(initial = false)
@@ -104,12 +106,12 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
     viewModel.updateMainUnitConnected(mainUnitConnectedToken.value)
 
     LaunchedEffect(intercomConnected.value) {
-        delay(500)
+        delay(500.milliseconds)
         viewModel.setBatteryStatus()
-        delay(3000)
+        delay(3.seconds)
         while (intercomConnected.value){
             viewModel.setBatteryStatus()
-            delay(240_000)
+            delay(4.minutes)
         }
     }
 
@@ -119,7 +121,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
     LaunchedEffect(Unit) {
         val savedMac = store.getBLEMAC()
         if (!savedMac.isNullOrEmpty()) {
-            delay(300) // kurzer Buffer nach Compose-Setup
+            delay(300.milliseconds) // kurzer Buffer nach Compose-Setup
             companion()
         }
     }
@@ -155,7 +157,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
     // Read firmware + hardware version from ESP once services are discovered
     LaunchedEffect(activeConnection, bleServices) {
         if (activeConnection != null && bleServices.isNotEmpty()) {
-            delay(200) // small buffer to ensure GATT is fully ready
+            delay(200.milliseconds) // small buffer to ensure GATT is fully ready
             installedFwVersion = activeConnection?.readFirmwareVersion()
             hardwareVersion = activeConnection?.readHardwareVersion()
             Log.d("HomeScreen", "Installed firmware: $installedFwVersion, HW: $hardwareVersion")
@@ -322,7 +324,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                                 viewModel.selBLDeviceClick()
                                 activeOverlay = ActiveOverlay.INTERCOM
                             },
-                            setBatteryStatus = { viewModel.setBatteryStatus() },
                             intercomName = viewModel.activeIntercomName,
                             selectedCount = intercomMacs.size,
                             connectedCount = viewModel.connectedIntercomCount,

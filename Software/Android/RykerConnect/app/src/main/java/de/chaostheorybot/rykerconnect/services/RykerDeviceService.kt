@@ -7,10 +7,8 @@ import android.bluetooth.BluetoothDevice
 import android.companion.AssociationInfo
 import android.companion.CompanionDeviceService
 import android.content.BroadcastReceiver
-import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import android.os.BatteryManager
 import android.os.Build
 import android.util.Log
 import androidx.annotation.RequiresApi
@@ -33,6 +31,7 @@ import de.chaostheorybot.rykerconnect.logic.pushPhoneBattery
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlin.time.Duration.Companion.seconds
 
 class RykerDeviceService : CompanionDeviceService() {
 
@@ -143,7 +142,7 @@ class RykerDeviceService : CompanionDeviceService() {
                     }
 
                     // Erneuter Sync nach 5 Sek zur Sicherheit
-                    delay(5000)
+                    delay(5.seconds)
                     if (connection.isConnected.value) connection.syncAll()
                 }
             }
@@ -179,7 +178,7 @@ class RykerDeviceService : CompanionDeviceService() {
         watchdogJob?.cancel()
         watchdogJob = serviceScope.launch {
             while (isActive) {
-                delay(60_000) // prüfe alle 60 s
+                delay(60.seconds) // prüfe alle 60 s
                 val conn = RykerConnectApplication.activeConnection.value ?: continue
                 if (!conn.isConnected.value) continue
                 val elapsed = android.os.SystemClock.elapsedRealtime() - conn.lastWriteTimestamp
@@ -261,10 +260,10 @@ class RykerDeviceService : CompanionDeviceService() {
             }.collectLatest { (macs, useBatteryChanged, pollSeconds) ->
                 // Im Changed-Modus liefert der Receiver den Pegel; die Schleife laeuft dann
                 // nur noch fuer das Intercom und bleibt beim Standardtakt.
-                val intervalMs = if (useBatteryChanged) {
-                    BATTERY_POLL_DEFAULT_SECONDS * 1000L
+                val interval = if (useBatteryChanged) {
+                    BATTERY_POLL_DEFAULT_SECONDS.seconds
                 } else {
-                    pollSeconds * 1000L
+                    pollSeconds.seconds
                 }
 
                 // currentCoroutineContext(), nicht isActive: letzteres bindet hier an die
@@ -287,7 +286,7 @@ class RykerDeviceService : CompanionDeviceService() {
                             }
                         } catch (e: Exception) { Log.e("RykerDeviceService", "Intercom update error: ${e.message}") }
                     }
-                    delay(intervalMs)
+                    delay(interval)
                 }
             }
         }
@@ -311,7 +310,7 @@ class RykerDeviceService : CompanionDeviceService() {
         Log.d("RykerDeviceService", "$tag – scheduling delayed cleanup (3 s)")
         cleanupJob?.cancel()
         cleanupJob = serviceScope.launch {
-            delay(3000)
+            delay(3.seconds)
             // Only clean up if the BLE connection is actually gone
             val conn = RykerConnectApplication.activeConnection.value
             if (conn == null || !conn.isConnected.value) {
