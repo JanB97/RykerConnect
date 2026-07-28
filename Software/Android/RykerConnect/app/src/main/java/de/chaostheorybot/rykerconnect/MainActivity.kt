@@ -268,6 +268,8 @@ class MainActivity : ComponentActivity() {
         }, null)
     }
 
+    // BLUETOOTH_CONNECT wird in Zeile 1 des Rumpfs geprüft; Lint folgt PermissionUtils nicht.
+    @SuppressLint("MissingPermission")
     private fun handleCompanionResult(result: androidx.activity.result.ActivityResult) {
         if (!PermissionUtils.hasBluetoothConnect(this)) return
         if (result.resultCode == RESULT_OK) {

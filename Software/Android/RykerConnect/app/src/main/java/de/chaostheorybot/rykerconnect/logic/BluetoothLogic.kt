@@ -1,6 +1,7 @@
 package de.chaostheorybot.rykerconnect.logic
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Application
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
@@ -30,6 +31,8 @@ object BluetoothLogic {
     }
 
 
+    // BLUETOOTH_CONNECT wird in Zeile 1 des Rumpfs geprüft; Lint folgt PermissionUtils nicht.
+    @SuppressLint("MissingPermission")
     fun getDevice(application: Application, deviceAddress: String): BluetoothDevice? {
         if (!PermissionUtils.hasBluetoothConnect(application)) return null
         return try {

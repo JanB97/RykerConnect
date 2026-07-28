@@ -1,5 +1,6 @@
 package de.chaostheorybot.rykerconnect.ui.screens.homescreen
 
+import android.annotation.SuppressLint
 import android.app.Application
 import android.bluetooth.BluetoothDevice
 import android.graphics.drawable.AnimationDrawable
@@ -73,6 +74,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application){
         isBLDeviceDialogShown = false
     }
 
+    // BLUETOOTH_CONNECT wird in Zeile 1 des Rumpfs geprüft; Lint folgt PermissionUtils nicht.
+    @SuppressLint("MissingPermission")
     fun onConfirmBLDeviceDialog(){
         if (!PermissionUtils.hasBluetoothConnect(getApplication())) return
         val store = RykerConnectStore(getApplication())
@@ -96,6 +99,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application){
         return getPairedDeviceList(application = getApplication())
     }
 
+    // BLUETOOTH_CONNECT wird in Zeile 1 des Rumpfs geprüft; Lint folgt PermissionUtils nicht.
+    @SuppressLint("MissingPermission")
     fun getIntercomDeviceName(mac: String = selectedMac): String {
         if (!PermissionUtils.hasBluetoothConnect(getApplication())) return selectedName
         if(intercomDevice == null && mac.isNotEmpty() && mac != "__EMPTY__"){

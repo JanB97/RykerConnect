@@ -1,5 +1,6 @@
 package de.chaostheorybot.rykerconnect.services
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -22,6 +23,8 @@ import kotlinx.coroutines.runBlocking
 
 class BluetoothConnectReceiver: BroadcastReceiver() {
 
+    // BLUETOOTH_CONNECT wird in Zeile 2 des Rumpfs geprüft; Lint folgt PermissionUtils nicht.
+    @SuppressLint("MissingPermission")
     override fun onReceive(context: Context?, intent: Intent?) {
         val appContext = context?.applicationContext ?: return
         if (!PermissionUtils.hasBluetoothConnect(appContext)) return

@@ -42,13 +42,14 @@ androidx-navigation-compose = { module = "androidx.navigation:navigation-compose
 client = { module = "no.nordicsemi.android.kotlin.ble:client", version.ref = "client" }
 junit = { module = "junit:junit", version.ref = "junit" }
 kotlin-bom = { module = "org.jetbrains.kotlin:kotlin-bom", version.ref = "kotlin" }
+# Hebt das von AGP mitgelieferte KGP auf unsere Kotlin-Version an (built-in Kotlin).
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
 scanner = { module = "no.nordicsemi.android.kotlin.ble:scanner", version.ref = "scanner" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 android-library = { id = "com.android.library", version.ref = "agp" }
-org-jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 
 [bundles]

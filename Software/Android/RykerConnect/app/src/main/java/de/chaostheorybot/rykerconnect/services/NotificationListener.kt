@@ -1,5 +1,6 @@
 package de.chaostheorybot.rykerconnect.services
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.content.pm.PackageManager
 import android.service.notification.NotificationListenerService
@@ -26,6 +27,8 @@ class NotificationListener : NotificationListenerService() {
     private val notifyList: MutableList<NotifyListClass> = ArrayList()
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    // BLUETOOTH_CONNECT wird vor dem BLE-Zugriff via PermissionUtils geprüft, dem Lint nicht folgt.
+    @SuppressLint("MissingPermission")
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
 

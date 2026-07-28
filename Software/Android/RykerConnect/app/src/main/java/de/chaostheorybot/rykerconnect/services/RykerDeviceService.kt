@@ -1,5 +1,6 @@
 package de.chaostheorybot.rykerconnect.services
 
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.bluetooth.BluetoothDevice
@@ -66,7 +67,7 @@ class RykerDeviceService : CompanionDeviceService() {
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
         } else {
             startForeground(1, notification)
         }
@@ -85,6 +86,8 @@ class RykerDeviceService : CompanionDeviceService() {
         info.deviceMacAddress?.toString()?.let { initDeviceConnection(it) }
     }
 
+    // BLUETOOTH_CONNECT wird in Zeile 1 des Rumpfs geprüft; Lint folgt PermissionUtils nicht.
+    @SuppressLint("MissingPermission")
     private fun initDeviceConnection(address: String) {
         if (!PermissionUtils.hasBluetoothConnect(this)) {
             Log.w("RykerDeviceService", "BLUETOOTH_CONNECT nicht erteilt, Verbindung abgebrochen")

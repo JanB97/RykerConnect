@@ -6,7 +6,6 @@ import android.companion.CompanionDeviceManager
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -43,7 +42,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-@RequiresApi(Build.VERSION_CODES.TIRAMISU)
 @Composable
 fun DebugCard(title: String?,
               artist: String?,
