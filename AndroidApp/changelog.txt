@@ -1,3 +1,12 @@
+V1.4.0: 
+- support for multiple intercoms with a priority order: if several are connected, the topmost one reports its battery
+- new app settings: Material You colors and a toggle for the debug Card
+- battery reporting is now configurable: charge state changes are sent instantly while the level is polled at an adjustable 30 s to 10 min
+- significantly fewer background wakeups by removing a permanent media session poll and idling the intercom loop when nothing is selected
+- fix: connecting an intercom while the main unit was disconnected crashed the app, and the battery value was sent to the wrong device
+- morph animations for settings, service and intercom now actually animate, plus support for the predictive back gesture
+- updated to Android 17, Gradle 9.6.1 and Kotlin 2.4.10  
+
 V1.3.1:
 - bluetooth stability improvements.
 
