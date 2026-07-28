@@ -32,6 +32,7 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
@@ -76,8 +77,9 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val navController = rememberNavController()
+            val dynamicColor by store.getDynamicColorToken.collectAsState(initial = true)
 
-            RykerConnectTheme {
+            RykerConnectTheme(dynamicColor = dynamicColor) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     val tokenValue = store.getFirstLaunchToken.collectAsState(initial = false)
                     NavHost(

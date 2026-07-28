@@ -23,6 +23,7 @@ import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import de.chaostheorybot.rykerconnect.data.setupChargeStateFilter
 import de.chaostheorybot.rykerconnect.data.setupSpotifyFilter
 import de.chaostheorybot.rykerconnect.logic.BLEDeviceConnection
+import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getActiveIntercom
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getBatteryLevel
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getDevice
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.waitForBLEConnection
@@ -207,10 +208,13 @@ class RykerDeviceService : CompanionDeviceService() {
             while (isActive) {
                 if (waitForBLEConnection()) {
                     try {
-                        store.getInterComMAC()?.let { mac ->
-                            val level = getBatteryLevel(getDevice(application, mac))
+                        // Nach Prioritaet: haengen mehrere Intercoms, gewinnt das oberste.
+                        getActiveIntercom(application, store.getIntercomMacs())?.let { intercom ->
+                            val level = getBatteryLevel(intercom)
                             if (level != -1) {
-                                Log.d("RykerDeviceService", "Intercom battery: $level")
+                                Log.d("RykerDeviceService", "Intercom battery (${intercom.address}): $level")
+                                RykerConnectApplication.intercomBattery = level.toByte()
+                                store.saveIntercomBattery(level)
                                 RykerConnectApplication.activeConnection.value?.writeIntercomBattery(level.toByte())
                             }
                         }

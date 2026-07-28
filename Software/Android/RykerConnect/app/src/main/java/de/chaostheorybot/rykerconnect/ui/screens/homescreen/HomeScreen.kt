@@ -12,10 +12,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -42,12 +46,14 @@ import de.chaostheorybot.rykerconnect.ui.screens.homescreen.cards.IntercomCard
 import de.chaostheorybot.rykerconnect.ui.screens.homescreen.cards.MainUnitCard
 import de.chaostheorybot.rykerconnect.ui.screens.homescreen.cards.ServiceCard
 import de.chaostheorybot.rykerconnect.ui.screens.servicescreen.CustomizeServiceScreen
+import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.AppSettingsScreen
 import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.DeviceSettingsScreen
 import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.FirmwareUpdateScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 
-private enum class ActiveOverlay { UPDATE, SERVICE, INTERCOM, SETTINGS }
+// SETTINGS = Geraeteeinstellungen der Haupteinheit, APP_SETTINGS = Einstellungen der App.
+private enum class ActiveOverlay { UPDATE, SERVICE, INTERCOM, SETTINGS, APP_SETTINGS }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
@@ -102,8 +108,14 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
     }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val intercomMAC = store.getSelectedMacToken.collectAsState(initial = "__EMPTY__")
+    val intercomMacs by store.getIntercomMacsToken.collectAsState(initial = emptyList())
+    val showDebugCard by store.getShowDebugCardToken.collectAsState(initial = true)
     val listState = rememberLazyListState()
+
+    LaunchedEffect(intercomMacs, intercomConnected.value) {
+        viewModel.onSelectedMacsChanged(intercomMacs)
+        viewModel.refreshActiveIntercom()
+    }
 
     val displaycutoutPadding = if(WindowInsets.displayCutout.asPaddingValues().calculateLeftPadding(LayoutDirection.Ltr) > WindowInsets.displayCutout.asPaddingValues().calculateRightPadding(
             LayoutDirection.Ltr)) WindowInsets.displayCutout.asPaddingValues().calculateLeftPadding(
@@ -239,6 +251,11 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                 topBar = {
                     CenterAlignedTopAppBar(
                         title = { Text(text = stringResource(id = R.string.app_name), style = MaterialTheme.typography.headlineMedium) },
+                        actions = {
+                            IconButton(onClick = { activeOverlay = ActiveOverlay.APP_SETTINGS }) {
+                                Icon(Icons.Filled.Settings, contentDescription = "App-Einstellungen")
+                            }
+                        },
                         scrollBehavior = scrollBehavior
                     )
                 }) { padding ->
@@ -279,7 +296,9 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                                 activeOverlay = ActiveOverlay.INTERCOM
                             },
                             setBatteryStatus = { viewModel.setBatteryStatus() },
-                            intercomName = if(intercomMAC.value!="__EMPTY__") viewModel.getIntercomDeviceName(mac = intercomMAC.value) else "",
+                            intercomName = viewModel.activeIntercomName,
+                            selectedCount = intercomMacs.size,
+                            connectedCount = viewModel.connectedIntercomCount,
                             sharedTransitionScope = this@SharedTransitionLayout,
                             animatedVisibilityScope = this@AnimatedVisibility
                         )
@@ -293,8 +312,10 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                         )
                     }
 
-                    item {
-                        DebugCard(mediaTitle, mediaArtist, mediaPlayState, tracklength = mediaTrackLength, trackposition = mediaTrackPosition, notifyTitle.value, notifyText.value, notifyApp = notifyApp.value, notifyAppName = notifyAppName.value, notifyCategory = notifyCategory.value)
+                    if (showDebugCard) {
+                        item {
+                            DebugCard(mediaTitle, mediaArtist, mediaPlayState, tracklength = mediaTrackLength, trackposition = mediaTrackPosition, notifyTitle.value, notifyText.value, notifyApp = notifyApp.value, notifyAppName = notifyAppName.value, notifyCategory = notifyCategory.value)
+                        }
                     }
 
                     item { Spacer(modifier = Modifier.height(padding.calculateBottomPadding() + 16.dp)) }
@@ -367,7 +388,6 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
             enter = fadeIn(),
             exit = fadeOut()
         ) {
-            val selectedValue = remember { mutableStateOf(viewModel.selectedMac) }
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -392,10 +412,9 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                             },
                             actions = {
                                 TextButton(onClick = {
-                                    viewModel.selectedMacTMP = selectedValue.value
                                     viewModel.onConfirmBLDeviceDialog()
                                     activeOverlay = null
-                                    Log.d("Conf in Overlay", selectedValue.value)
+                                    Log.d("Conf in Overlay", viewModel.pendingMacs.joinToString())
                                 }) {
                                     Text("Save")
                                 }
@@ -414,20 +433,85 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(start = 12.dp, end = 12.dp, bottom = 16.dp, top = 8.dp)
+                                    .padding(start = 12.dp, end = 12.dp, bottom = 8.dp, top = 8.dp)
                             )
                         }
+
+                        // ── Prioritaetsliste ───────────────────────────────
+                        if (viewModel.pendingMacs.size > 1) {
+                            item {
+                                Text(
+                                    text = "Prioritaet",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(start = 4.dp, top = 8.dp)
+                                )
+                            }
+                            item {
+                                Text(
+                                    text = "Sind mehrere Intercoms gleichzeitig verbunden, " +
+                                            "gilt das oberste.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
+                                )
+                            }
+                            itemsIndexed(viewModel.pendingMacs) { index, mac ->
+                                val device = viewModel.pairedInterComDevices
+                                    .firstOrNull { it.mac.equals(mac, ignoreCase = true) }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "${index + 1}.",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        modifier = Modifier.padding(start = 8.dp, end = 12.dp)
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = device?.name ?: mac,
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            maxLines = 1
+                                        )
+                                        Text(
+                                            text = mac,
+                                            fontSize = 11.sp,
+                                            color = Color.Gray,
+                                            lineHeight = 1.sp
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { viewModel.movePendingIntercom(index, index - 1) },
+                                        enabled = index > 0
+                                    ) {
+                                        Icon(Icons.Filled.KeyboardArrowUp, "Hoehere Prioritaet")
+                                    }
+                                    IconButton(
+                                        onClick = { viewModel.movePendingIntercom(index, index + 1) },
+                                        enabled = index < viewModel.pendingMacs.lastIndex
+                                    ) {
+                                        Icon(Icons.Filled.KeyboardArrowDown, "Niedrigere Prioritaet")
+                                    }
+                                }
+                            }
+                            item { HorizontalDivider(modifier = Modifier.padding(top = 12.dp, bottom = 12.dp)) }
+                        }
+
+                        // ── Geraeteauswahl ─────────────────────────────────
                         items(viewModel.pairedInterComDevices) { item ->
+                            val checked = viewModel.pendingMacs.any { it.equals(item.mac, ignoreCase = true) }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(12.dp))
-                                    .clickable { selectedValue.value = item.mac }
+                                    .clickable { viewModel.togglePendingIntercom(item.mac) }
                             ) {
-                                RadioButton(
-                                    selected = selectedValue.value == item.mac,
-                                    onClick = { selectedValue.value = item.mac }
+                                Checkbox(
+                                    checked = checked,
+                                    onCheckedChange = { viewModel.togglePendingIntercom(item.mac) }
                                 )
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
@@ -454,6 +538,21 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                         }
                     }
                 }
+            }
+        }
+
+        // ── App settings overlay ────────────────────────────────────────
+        AnimatedVisibility(
+            visible = activeOverlay == ActiveOverlay.APP_SETTINGS,
+            enter = fadeIn(),
+            exit = fadeOut()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface)
+            ) {
+                AppSettingsScreen(onBack = { activeOverlay = null }, store = store)
             }
         }
     }

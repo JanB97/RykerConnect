@@ -2,7 +2,6 @@ package de.chaostheorybot.rykerconnect.logic
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Application
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
@@ -32,7 +31,7 @@ object BluetoothLogic {
 
     // BLUETOOTH_CONNECT wird in Zeile 1 des Rumpfs geprüft; Lint folgt PermissionUtils nicht.
     @SuppressLint("MissingPermission")
-    fun getDevice(application: Application, deviceAddress: String): BluetoothDevice? {
+    fun getDevice(application: Context, deviceAddress: String): BluetoothDevice? {
         if (!PermissionUtils.hasBluetoothConnect(application)) return null
         return try {
             val bMan = application.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
@@ -46,7 +45,34 @@ object BluetoothLogic {
     }
 
 
-    fun getPairedDeviceList(application: Application): MutableList<BluetoothDevices> {
+    /**
+     * Liefert das erste verbundene Geraet aus [macs]. Die Reihenfolge der Liste ist die
+     * Prioritaet: haengen mehrere Intercoms gleichzeitig, gewinnt das mit dem kleinsten Index.
+     * Gibt null zurueck, wenn keines davon verbunden ist.
+     */
+    fun getActiveIntercom(context: Context, macs: List<String>): BluetoothDevice? {
+        if (!PermissionUtils.hasBluetoothConnect(context)) return null
+        for (mac in macs) {
+            val device = getDevice(context, mac) ?: continue
+            if (getConnectionStatus(device)) return device
+        }
+        return null
+    }
+
+    /**
+     * Fragt den Akkustand mehrfach ab. Direkt nach dem Verbinden liefert die Gegenstelle
+     * noch keinen Wert, deshalb bis zu 40 Versuche a 20 ms.
+     */
+    suspend fun awaitBatteryLevel(device: BluetoothDevice): Int {
+        repeat(40) {
+            val level = try { getBatteryLevel(device) } catch (_: Exception) { -1 }
+            if (level >= 0) return level
+            delay(20)
+        }
+        return -1
+    }
+
+    fun getPairedDeviceList(application: Context): MutableList<BluetoothDevices> {
         val devicesList = mutableListOf<BluetoothDevices>()
 
         // minSdk 31 => immer BLUETOOTH_CONNECT; die Legacy-Permission BLUETOOTH entfaellt.

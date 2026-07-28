@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothDevice
 import android.graphics.drawable.AnimationDrawable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
@@ -14,6 +15,7 @@ import de.chaostheorybot.rykerconnect.R
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
 import de.chaostheorybot.rykerconnect.data.RykerConnectStore
 import de.chaostheorybot.rykerconnect.logic.BluetoothDevices
+import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getActiveIntercom
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getBatteryLevel
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getConnectionStatus
 import de.chaostheorybot.rykerconnect.logic.BluetoothLogic.getDevice
@@ -32,20 +34,34 @@ class HomeViewModel(application: Application) : AndroidViewModel(application){
     var intercomConnected by mutableStateOf(false)
         private set
 
-    private var intercomDevice: BluetoothDevice? by mutableStateOf(null)
+    /** Das Intercom, dessen Werte gerade gelten - hoechste Prioritaet unter den verbundenen. */
+    private var activeIntercomDevice: BluetoothDevice? by mutableStateOf(null)
 
     var isBLDeviceDialogShown by mutableStateOf(false)
         private set
-    var selectedMac by mutableStateOf("")
+
+    /** Ausgewaehlte Intercoms, Index 0 = hoechste Prioritaet. */
+    var selectedMacs by mutableStateOf<List<String>>(emptyList())
         private set
-    private var selectedName: String = ""
-    var selectedMacTMP by mutableStateOf("")
+
+    /** Arbeitskopie fuer das Auswahl-Overlay, wird erst beim Speichern uebernommen. */
+    val pendingMacs = mutableStateListOf<String>()
+
     var pairedInterComDevices: MutableList<BluetoothDevices> = mutableListOf()
         private set
+
+    /** Name des aktiven Intercoms, sonst des wichtigsten ausgewaehlten. */
+    var activeIntercomName by mutableStateOf("")
+        private set
+
+    /** Wie viele der ausgewaehlten Intercoms gerade verbunden sind. */
+    var connectedIntercomCount by mutableIntStateOf(0)
+        private set
+
     private val drwON = application.getDrawable(_onDrawable) as AnimationDrawable
     private val drwOff = application.getDrawable(_offDrawable) as AnimationDrawable
     private var rykerDrawable = mutableStateOf(drwOff)
-    
+
     var intercomBatLvl: Int by mutableIntStateOf(-1)
         private set
 
@@ -60,33 +76,53 @@ class HomeViewModel(application: Application) : AndroidViewModel(application){
         }
     }
 
+    /** Wird aufgerufen, wenn die persistierte Auswahl sich aendert. */
+    fun onSelectedMacsChanged(macs: List<String>) {
+        if (macs == selectedMacs) return
+        selectedMacs = macs
+        refreshActiveIntercom()
+    }
+
     fun intercomClick(){
         updateIntercomConnected(!intercomConnected)
     }
     fun mainUnitClick(){
         updateMainUnitConnected(!mainUnitConnected)
     }
+
     fun selBLDeviceClick(){
         pairedInterComDevices = getPairedDevices()
+        pendingMacs.clear()
+        // Bereits ausgewaehlte zuerst, in gespeicherter Reihenfolge.
+        pendingMacs.addAll(selectedMacs)
         isBLDeviceDialogShown = true
     }
+
     fun onDismissBLDeviceDialog(){
         isBLDeviceDialogShown = false
     }
 
-    // BLUETOOTH_CONNECT wird in Zeile 1 des Rumpfs geprüft; Lint folgt PermissionUtils nicht.
-    @SuppressLint("MissingPermission")
+    /** Haengt ein Intercom hinten an die Prioritaetsliste oder nimmt es heraus. */
+    fun togglePendingIntercom(mac: String) {
+        val existing = pendingMacs.indexOfFirst { it.equals(mac, ignoreCase = true) }
+        if (existing >= 0) pendingMacs.removeAt(existing) else pendingMacs.add(mac)
+    }
+
+    /** Verschiebt einen Eintrag in der Prioritaetsliste. */
+    fun movePendingIntercom(from: Int, to: Int) {
+        if (from !in pendingMacs.indices || to !in pendingMacs.indices) return
+        pendingMacs.add(to, pendingMacs.removeAt(from))
+    }
+
     fun onConfirmBLDeviceDialog(){
-        if (!PermissionUtils.hasBluetoothConnect(getApplication())) return
-        val store = RykerConnectStore(getApplication())
         isBLDeviceDialogShown = false
-        selectedMac = selectedMacTMP
-        intercomDevice = getDevice(application = getApplication(), selectedMac)
-        selectedName = intercomDevice?.name.toString()
-        
+        val macs = pendingMacs.toList()
+        selectedMacs = macs
         viewModelScope.launch {
-            store.saveSelectedMac(selectedMac)
-            store.saveInterComConnected(getConnectionStatus(intercomDevice))
+            val store = RykerConnectStore(getApplication())
+            store.saveIntercomMacs(macs)
+            refreshActiveIntercom()
+            store.saveInterComConnected(activeIntercomDevice != null)
             setBatteryStatus()
         }
     }
@@ -94,21 +130,29 @@ class HomeViewModel(application: Application) : AndroidViewModel(application){
     fun getRykerDrawable(): AnimationDrawable{
        return rykerDrawable.value
     }
-    
+
     private fun getPairedDevices(): MutableList<BluetoothDevices>{
-        return getPairedDeviceList(application = getApplication())
+        return getPairedDeviceList(getApplication())
     }
 
-    // BLUETOOTH_CONNECT wird in Zeile 1 des Rumpfs geprüft; Lint folgt PermissionUtils nicht.
+    /**
+     * Bestimmt neu, welches Intercom gilt, und aktualisiert Name und Verbundenen-Zaehler.
+     */
+    // BLUETOOTH_CONNECT wird ueber PermissionUtils geprüft, dem Lint nicht folgt.
     @SuppressLint("MissingPermission")
-    fun getIntercomDeviceName(mac: String = selectedMac): String {
-        if (!PermissionUtils.hasBluetoothConnect(getApplication())) return selectedName
-        if(intercomDevice == null && mac.isNotEmpty() && mac != "__EMPTY__"){
-            intercomDevice = getDevice(getApplication(), mac)
-            selectedName = intercomDevice?.name ?: "Unknown"
-            selectedMac = mac
+    fun refreshActiveIntercom() {
+        if (!PermissionUtils.hasBluetoothConnect(getApplication())) return
+        val app = getApplication<Application>()
+
+        activeIntercomDevice = getActiveIntercom(app, selectedMacs)
+        connectedIntercomCount = selectedMacs.count { mac ->
+            getDevice(app, mac)?.let { getConnectionStatus(it) } == true
         }
-        return selectedName
+
+        // Ist keines verbunden, zeigen wir den Namen des wichtigsten ausgewaehlten Geraets.
+        val displayDevice = activeIntercomDevice
+            ?: selectedMacs.firstOrNull()?.let { getDevice(app, it) }
+        activeIntercomName = displayDevice?.name ?: ""
     }
 
     private fun updateRykerDrawable(connected: Boolean){
@@ -119,19 +163,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application){
             rykerDrawable.value.start()
         }
     }
-    
+
     fun updateMainUnitConnected(connected: Boolean){
         mainUnitConnected = connected
         updateRykerDrawable(connected)
     }
-    
+
     fun updateIntercomConnected(connected: Boolean){
         intercomConnected = connected
     }
 
     fun setBatteryStatus(){
+        refreshActiveIntercom()
         val level = try {
-            getBatteryLevel(intercomDevice)
+            getBatteryLevel(activeIntercomDevice)
         } catch(_: Exception){
             -1
         }

@@ -14,9 +14,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 
-private const val _DYNAMIC = true
-
-
 private val LightColors = lightColorScheme(
     primary = md_theme_light_primary,
     onPrimary = md_theme_light_onPrimary,
@@ -89,10 +86,11 @@ private val DarkColors = darkColorScheme(
 @Composable
 fun RykerConnectTheme(
   useDarkTheme: Boolean = isSystemInDarkTheme(),
+  // Material You. dynamic*ColorScheme gibt es ab API 31, minSdk ist 31 - kein Guard noetig.
+  dynamicColor: Boolean = true,
   content: @Composable() () -> Unit
 ) {
 
-    val dynamicColor = _DYNAMIC
     val colors = when {
                 dynamicColor && useDarkTheme  -> dynamicDarkColorScheme(LocalContext.current)
                 dynamicColor && !useDarkTheme -> dynamicLightColorScheme(LocalContext.current)

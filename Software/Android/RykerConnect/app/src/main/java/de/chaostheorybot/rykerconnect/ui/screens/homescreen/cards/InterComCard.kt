@@ -62,6 +62,9 @@ fun IntercomCard(
     selectDeviceClick: () -> Unit,
     setBatteryStatus: () -> Unit,
     intercomName: String,
+    /** Anzahl ausgewaehlter Intercoms; ab 2 wird die Prioritaets-Zeile eingeblendet. */
+    selectedCount: Int = 1,
+    connectedCount: Int = 0,
     sharedTransitionScope: SharedTransitionScope,
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
@@ -203,6 +206,15 @@ fun IntercomCard(
                     }
 
                     Text(text = intercomName)
+
+                    // Bei mehreren gekoppelten Intercoms sichtbar machen, welches gerade gilt.
+                    if (selectedCount > 1) {
+                        Text(
+                            text = "$connectedCount von $selectedCount verbunden - aktiv nach Prioritaet",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
 
                     val statusColor by animateColorAsState(
                         targetValue = if (intercomConnected) Color(0xFF4CAF50) else MaterialTheme.colorScheme.error,

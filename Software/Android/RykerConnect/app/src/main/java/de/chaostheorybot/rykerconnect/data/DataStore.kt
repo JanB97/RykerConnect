@@ -36,6 +36,16 @@ class RykerConnectStore(private val context: Context) {
         
         private val INTERCOM_BATTERY_TOKEN = intPreferencesKey("intercom_battery")
 
+        // Mehrere Intercoms, geordnet nach Prioritaet (Index 0 = wichtigstes).
+        private val INTERCOM_MACS_TOKEN = stringPreferencesKey("intercom_macs")
+
+        // App-Einstellungen
+        private val DYNAMIC_COLOR_TOKEN = booleanPreferencesKey("dynamic_color")
+        private val SHOW_DEBUG_CARD_TOKEN = booleanPreferencesKey("show_debug_card")
+
+        private fun decodeMacs(stored: String?, legacy: String?): List<String> =
+            decodeIntercomMacs(stored, legacy)
+
         // Firmware Update Settings
         private val FW_AUTO_DOWNLOAD = booleanPreferencesKey("fw_auto_download")
         private val FW_VERSION = stringPreferencesKey("fw_version")
@@ -69,6 +79,11 @@ class RykerConnectStore(private val context: Context) {
     val getBLEMACToken: Flow<String> = context.dataStore.data.map { it[BLE_MAC_TOKEN] ?: "" }
     val getBLEAppearToken: Flow<Boolean> = context.dataStore.data.map { it[BLE_APPEAR_TOKEN] ?: false }
     val getIntercomBatteryToken: Flow<Int> = context.dataStore.data.map { it[INTERCOM_BATTERY_TOKEN] ?: -1 }
+    val getIntercomMacsToken: Flow<List<String>> = context.dataStore.data.map {
+        decodeMacs(it[INTERCOM_MACS_TOKEN], it[SEL_MAC_TOKEN])
+    }
+    val getDynamicColorToken: Flow<Boolean> = context.dataStore.data.map { it[DYNAMIC_COLOR_TOKEN] ?: true }
+    val getShowDebugCardToken: Flow<Boolean> = context.dataStore.data.map { it[SHOW_DEBUG_CARD_TOKEN] ?: true }
     val getMusicPlayerToken: Flow<MusicService> = context.dataStore.data.map { pref ->
         MusicService.fromId(pref[MUSIC_PLAYER_TOKEN] ?: 0) ?: MusicService.SPOTIFY 
     }
@@ -145,10 +160,44 @@ class RykerConnectStore(private val context: Context) {
 
     suspend fun getBLEMAC(): String? = context.dataStore.data.first()[BLE_MAC_TOKEN]
     suspend fun getBLEAppear(): Boolean = context.dataStore.data.first()[BLE_APPEAR_TOKEN] ?: false
-    suspend fun getInterComMAC(): String? = context.dataStore.data.first()[SEL_MAC_TOKEN]
+    suspend fun getInterComMAC(): String? = getIntercomMacs().firstOrNull()
+
+    /** Ausgewaehlte Intercoms, Index 0 = hoechste Prioritaet. */
+    suspend fun getIntercomMacs(): List<String> = context.dataStore.data.first().let {
+        decodeMacs(it[INTERCOM_MACS_TOKEN], it[SEL_MAC_TOKEN])
+    }
+
+    suspend fun saveIntercomMacs(macs: List<String>) {
+        context.dataStore.edit {
+            it[INTERCOM_MACS_TOKEN] = encodeIntercomMacs(macs)
+            // Legacy-Feld mitpflegen: haelt aeltere Lesepfade auf dem wichtigsten Geraet.
+            it[SEL_MAC_TOKEN] = macs.firstOrNull() ?: ""
+        }
+    }
+
+    suspend fun saveDynamicColor(value: Boolean) { context.dataStore.edit { it[DYNAMIC_COLOR_TOKEN] = value } }
+    suspend fun saveShowDebugCard(value: Boolean) { context.dataStore.edit { it[SHOW_DEBUG_CARD_TOKEN] = value } }
     suspend fun getMusicPlayer(): MusicService? = MusicService.fromId(context.dataStore.data.first()[MUSIC_PLAYER_TOKEN] ?: 0)
     suspend fun saveMusicPlayer(service: MusicService) { context.dataStore.edit { it[MUSIC_PLAYER_TOKEN] = service.id } }
 }
+
+internal const val INTERCOM_MAC_SEPARATOR = ";"
+
+/**
+ * Liest die Intercom-Prioritaetsliste aus dem gespeicherten String.
+ *
+ * Faellt auf die alte Einzel-MAC ([legacy]) zurueck, damit bestehende Installationen
+ * ihr Intercom beim Update auf die Mehrfachauswahl nicht verlieren. Reihenfolge =
+ * Prioritaet, Index 0 gewinnt.
+ */
+internal fun decodeIntercomMacs(stored: String?, legacy: String?): List<String> = when {
+    !stored.isNullOrBlank() -> stored.split(INTERCOM_MAC_SEPARATOR).filter { it.isNotBlank() }
+    !legacy.isNullOrBlank() && legacy != "__EMPTY__" -> listOf(legacy)
+    else -> emptyList()
+}
+
+internal fun encodeIntercomMacs(macs: List<String>): String =
+    macs.joinToString(INTERCOM_MAC_SEPARATOR)
 
 enum class MusicService(val id: Int, val displayName: String) {
     SPOTIFY(0, "Spotify"),
