@@ -1,6 +1,5 @@
 package de.chaostheorybot.rykerconnect.services
 
-import android.app.Application
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -24,7 +23,8 @@ import kotlinx.coroutines.runBlocking
 class BluetoothConnectReceiver: BroadcastReceiver() {
 
     override fun onReceive(context: Context?, intent: Intent?) {
-        if (context != null && !PermissionUtils.hasBluetoothConnect(context)) return
+        val appContext = context?.applicationContext ?: return
+        if (!PermissionUtils.hasBluetoothConnect(appContext)) return
 
         val action = intent?.action
         when(action){
@@ -35,8 +35,8 @@ class BluetoothConnectReceiver: BroadcastReceiver() {
                 Log.d("ACL_Connected", "Device Connected: ${device?.address}")
                 //Toast.makeText(context, "Device Connected: ${device?.address} - RykerConnect", Toast.LENGTH_LONG).show()
 
-                val store: RykerConnectStore? = context?.let { RykerConnectStore(it) }
-                if (store != null && device != null){
+                val store = RykerConnectStore(appContext)
+                if (device != null){
                     Log.d("ACL_Connected", "Device und Store not null")
                     //val selectedMAC = store.getSelectedMacToken
                     val selectedMAC: String
@@ -51,7 +51,7 @@ class BluetoothConnectReceiver: BroadcastReceiver() {
                         }
                         if(RykerConnectApplication.activeConnection.value?.isConnected?.value != true){
                             if(runBlocking { store.getBLEAppear() }){
-                                RykerConnectApplication.activeConnection.value = device.run { BLEDeviceConnection(Application(), device) }
+                                RykerConnectApplication.activeConnection.value = BLEDeviceConnection(appContext, device)
                                 RykerConnectApplication.activeConnection.value?.connect()
                                 var intercomBatLvl: Int
                                 var i = 0
@@ -89,7 +89,7 @@ class BluetoothConnectReceiver: BroadcastReceiver() {
                         Log.d("ACL_Connected", "${device.address} != $selectedMAC - NOT SAVED")
                     }
                 }else{
-                    Log.d("ACL_Connected", "NULL, DEVICE: $device | STORE: $store")
+                    Log.d("ACL_Connected", "NULL, DEVICE: $device")
                 }
 
             }
@@ -100,8 +100,8 @@ class BluetoothConnectReceiver: BroadcastReceiver() {
                 Log.d("ACL_Disconnected", "Device Disconnected: ${device?.address}")
                 //Toast.makeText(context, "Device Disconnected: ${device?.address} - RykerConnect", Toast.LENGTH_LONG).show()
 
-                val store: RykerConnectStore? = context?.let { RykerConnectStore(it) }
-                if (store != null && device != null){
+                val store = RykerConnectStore(appContext)
+                if (device != null){
                     Log.d("ACL_Disconnected", "Device und Store not null")
                     //val selectedMAC = store.getSelectedMacToken
                     val selectedMAC: String
