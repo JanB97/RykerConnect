@@ -40,6 +40,12 @@ android {
             excludes += '/META-INF/{AL2.0,LGPL2.1}'
         }
     }
+    lint {
+        // drawable-mdpi enthaelt die 40 ryker_*.webp Animationsframes, keine Icons.
+        // Vier Dichtevarianten davon wuerden das APK vervielfachen, und der Rahmen
+        // begrenzt die Darstellung ohnehin - die Pruefung greift hier ins Leere.
+        disable += 'IconMissingDensityFolder'
+    }
 }
 
 kotlin {

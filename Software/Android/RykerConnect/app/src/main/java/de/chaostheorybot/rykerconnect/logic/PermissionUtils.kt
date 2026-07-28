@@ -3,6 +3,7 @@ package de.chaostheorybot.rykerconnect.logic
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import androidx.core.app.ActivityCompat
 
@@ -47,6 +48,11 @@ object PermissionUtils {
     }
 
     fun hasPostNotifications(context: Context): Boolean {
+        // Vor API 33 gibt es die Permission nicht. checkSelfPermission liefert dort
+        // PERMISSION_DENIED fuer den unbekannten String - das waere faelschlich "nicht erteilt",
+        // obwohl Notifications ohne Runtime-Permission erlaubt sind.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+
         val granted = ActivityCompat.checkSelfPermission(
             context, Manifest.permission.POST_NOTIFICATIONS
         ) == PackageManager.PERMISSION_GRANTED

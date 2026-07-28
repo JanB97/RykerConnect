@@ -133,8 +133,8 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
                 var success = false
                 response.use { resp ->
                     if (resp.isSuccessful) {
-                        val bodyString = resp.body?.string()
-                        if (bodyString != null) {
+                        val bodyString = resp.body.string()
+                        if (bodyString.isNotEmpty()) {
                             val json = JSONArray(bodyString)
                             val list = mutableListOf<String>()
                             for (i in 0 until json.length()) {
@@ -166,8 +166,8 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
                     val fbResponse = client.newCall(fbRequest).execute()
                     fbResponse.use { resp ->
                         if (resp.isSuccessful) {
-                            val bodyString = resp.body?.string()
-                            if (bodyString != null) {
+                            val bodyString = resp.body.string()
+                            if (bodyString.isNotEmpty()) {
                                 val json = JSONArray(bodyString)
                                 val list = mutableListOf<String>()
                                 for (i in 0 until json.length()) {
@@ -202,7 +202,7 @@ fun FirmwareUpdateScreen(onBack: () -> Unit, store: RykerConnectStore) {
                 val clResponse = client.newCall(clRequest).execute()
                 clResponse.use { resp ->
                     if (resp.isSuccessful) {
-                        changelogText = resp.body?.string()
+                        changelogText = resp.body.string()
                     }
                 }
             } catch (e: Exception) {

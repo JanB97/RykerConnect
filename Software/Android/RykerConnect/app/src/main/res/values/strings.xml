@@ -7,9 +7,7 @@
     <string name="app_name">&appname;</string>
     <string name="service_name">&service_name;</string>
     <string name="companion_service_name">CompanionDeviceService</string>
-    <string name="str_main_activity_top">&appname; Setup</string>
     <string name="str_test">&appname; einrichten</string>
-    <string name="str_test2">Damit &appname; richtig funktioniert, werden einige Berechtigungen benötigt. Im Folgenden erklären wir dir, warum jede einzelne Berechtigung nötig ist.</string>
     <string name="str_main_device">Ryker - Main unit</string>
     <string name="str_sel_device">Select Device</string>
 
@@ -40,7 +38,4 @@
 
     <string name="setup_complete">Einrichtung abschließen</string>
 
-    <string name="str_local_notificationlistener_intent">de.chaostheorybot.rykerconnect.services.NOTIFICATION_LISTENER</string>
-    <string name="str_local_spotifylistener_intent_metadata">de.chaostheorybot.rykerconnect.services.SPOTIFY_LISTENER.METADATA</string>
-    <string name="str_local_spotifylistener_intent_playstate">de.chaostheorybot.rykerconnect.services.SPOTIFY_LISTENER.PLAYSTATE</string>
 </resources>

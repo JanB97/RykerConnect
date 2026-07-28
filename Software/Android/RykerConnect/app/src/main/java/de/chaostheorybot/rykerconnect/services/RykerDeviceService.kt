@@ -62,11 +62,9 @@ class RykerDeviceService : CompanionDeviceService() {
 
     private fun startServiceForeground() {
         val channelId = "ryker_connect_service"
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, "Ryker Connect Active", NotificationManager.IMPORTANCE_LOW)
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
-        }
+        // minSdk 31: Notification-Channels gibt es immer, kein SDK_INT-Guard noetig.
+        val channel = NotificationChannel(channelId, "Ryker Connect Active", NotificationManager.IMPORTANCE_LOW)
+        getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
 
         val notification = NotificationCompat.Builder(this, channelId)
             .setContentTitle("Ryker Connect")

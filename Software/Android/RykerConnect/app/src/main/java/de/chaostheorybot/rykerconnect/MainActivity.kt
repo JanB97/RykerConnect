@@ -274,13 +274,15 @@ class MainActivity : ComponentActivity() {
     }
 
     // BLUETOOTH_CONNECT wird in Zeile 1 des Rumpfs geprüft; Lint folgt PermissionUtils nicht.
+    // EXTRA_DEVICE ist seit API 34 deprecated, wird hier aber fuer beide Rueckgabewege
+    // gebraucht - CDM liefert das Ergebnis bei minSdk 31 weiterhin darueber.
     @SuppressLint("MissingPermission")
+    @Suppress("DEPRECATION")
     private fun handleCompanionResult(result: androidx.activity.result.ActivityResult) {
         if (!PermissionUtils.hasBluetoothConnect(this)) return
         if (result.resultCode == RESULT_OK) {
             val data = result.data ?: return
             // Try BLE ScanResult first (from BluetoothLeDeviceFilter)
-            @Suppress("DEPRECATION")
             val scanResult = IntentCompat.getParcelableExtra(
                 data, CompanionDeviceManager.EXTRA_DEVICE, ScanResult::class.java
             )

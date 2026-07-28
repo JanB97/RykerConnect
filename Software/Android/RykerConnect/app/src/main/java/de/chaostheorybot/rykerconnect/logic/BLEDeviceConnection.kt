@@ -167,10 +167,17 @@ class BLEDeviceConnection @RequiresPermission(Manifest.permission.BLUETOOTH_CONN
         return characteristic
     }
 
+    // API 37 deprecated saemtliche Context-Varianten von connectGatt zugunsten von
+    // connectGatt(BluetoothGattConnectionSettings, Executor, Callback). Die gibt es erst
+    // ab 37, bei minSdk 31 braeuchte es also einen Versionszweig - der gehoert nicht
+    // ungetestet in den Verbindungsaufbau. Bewusst bei der bewaehrten Variante geblieben.
+    @Suppress("DEPRECATION")
     fun connect() {
         if (!PermissionUtils.hasBluetoothConnect(context)) return
         if (gatt == null) {
-            gatt = bluetoothDevice.connectGatt(context, false, callback)
+            // Explizit TRANSPORT_LE statt TRANSPORT_AUTO: die Haupteinheit ist ein reines
+            // BLE-Peripheral, damit entfaellt das Raten des Transports.
+            gatt = bluetoothDevice.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
         }
     }
 

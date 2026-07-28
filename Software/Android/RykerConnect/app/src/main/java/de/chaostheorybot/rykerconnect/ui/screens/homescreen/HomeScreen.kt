@@ -181,8 +181,8 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                 var success = false
                 response.use { resp ->
                     if (resp.isSuccessful) {
-                        val body = resp.body?.string()
-                        if (body != null) {
+                        val body = resp.body.string()
+                        if (body.isNotEmpty()) {
                             val json = org.json.JSONArray(body)
                             val list = mutableListOf<String>()
                             for (i in 0 until json.length()) {
@@ -208,8 +208,8 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                     val fbResp = client.newCall(fbReq).execute()
                     fbResp.use { resp ->
                         if (resp.isSuccessful) {
-                            val body = resp.body?.string()
-                            if (body != null) {
+                            val body = resp.body.string()
+                            if (body.isNotEmpty()) {
                                 val json = org.json.JSONArray(body)
                                 val list = mutableListOf<String>()
                                 for (i in 0 until json.length()) {

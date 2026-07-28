@@ -27,7 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.times
@@ -54,8 +55,10 @@ fun MainUnitCard(
     animatedVisibilityScope: AnimatedVisibilityScope
 ) {
 
-    val configuration = LocalConfiguration.current
-    val dpHeight = configuration.screenHeightDp.toFloat()
+    // containerSize statt Configuration.screenHeightDp: letzteres ist in Compose
+    // abgekuendigt und liefert bei Multi-Window nicht die tatsaechliche Fenstergroesse.
+    val containerHeightPx = LocalWindowInfo.current.containerSize.height
+    val dpHeight = with(LocalDensity.current) { containerHeightPx.toDp().value }
 
     val expandRotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
