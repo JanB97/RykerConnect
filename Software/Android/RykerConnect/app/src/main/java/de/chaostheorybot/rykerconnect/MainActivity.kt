@@ -247,6 +247,9 @@ class MainActivity : ComponentActivity() {
                 launchIntentSender(intentSender)
             }
 
+            // Diese Callback-Ueberladung gibt es erst ab API 33; auf 31/32 ruft das System
+            // stattdessen onDeviceFound(). Der Rumpf darf daher 33er-APIs verwenden.
+            @RequiresApi(Build.VERSION_CODES.TIRAMISU)
             override fun onAssociationCreated(associationInfo: AssociationInfo) {
                 isAssociating = false
                 val macAddress = associationInfo.deviceMacAddress?.toString()
