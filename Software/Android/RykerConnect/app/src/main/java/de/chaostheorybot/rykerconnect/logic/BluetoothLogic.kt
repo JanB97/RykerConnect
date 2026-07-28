@@ -7,7 +7,6 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import android.util.Log
 import androidx.core.app.ActivityCompat
 import de.chaostheorybot.rykerconnect.RykerConnectApplication
@@ -50,11 +49,8 @@ object BluetoothLogic {
     fun getPairedDeviceList(application: Application): MutableList<BluetoothDevices> {
         val devicesList = mutableListOf<BluetoothDevices>()
 
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            Manifest.permission.BLUETOOTH_CONNECT
-        } else {
-            Manifest.permission.BLUETOOTH
-        }
+        // minSdk 31 => immer BLUETOOTH_CONNECT; die Legacy-Permission BLUETOOTH entfaellt.
+        val permission = Manifest.permission.BLUETOOTH_CONNECT
 
         if (ActivityCompat.checkSelfPermission(application, permission) != PackageManager.PERMISSION_GRANTED) {
             Log.w("BluetoothLogic", "Missing bluetooth permissions")
