@@ -3,14 +3,14 @@ package de.chaostheorybot.rykerconnect.ui.screens.homescreen
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.BoundsTransform
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -31,8 +31,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
@@ -57,11 +57,17 @@ import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.FirmwareUpdateSc
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 
-/**
- * Ursprung der App-Menue-Animation: oben rechts, wo das Zahnrad sitzt.
- * Damit zieht sich der Screen aus dem Button auf, statt einfach einzublenden.
- */
-private val AppSettingsOrigin = TransformOrigin(pivotFractionX = 1f, pivotFractionY = 0f)
+/** Lange, gleichmaessige Kurve - ein 48-dp-Icon auf Vollbild braucht sichtbare Zeit. */
+private val AppSettingsBounds = BoundsTransform { _, _ ->
+    tween(durationMillis = 420, easing = FastOutSlowInEasing)
+}
+
+/** Crop verhindert, dass der Screen bei diesem Groessenunterschied zum Streifen gestaucht wird. */
+@OptIn(ExperimentalSharedTransitionApi::class)
+private val AppSettingsResize = SharedTransitionScope.ResizeMode.scaleToBounds(
+    contentScale = ContentScale.Crop,
+    alignment = Alignment.TopEnd
+)
 
 // SETTINGS = Geraeteeinstellungen der Haupteinheit, APP_SETTINGS = Einstellungen der App.
 private enum class ActiveOverlay { UPDATE, SERVICE, INTERCOM, SETTINGS, APP_SETTINGS }
@@ -263,7 +269,17 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                     CenterAlignedTopAppBar(
                         title = { Text(text = stringResource(id = R.string.app_name), style = MaterialTheme.typography.headlineMedium) },
                         actions = {
-                            IconButton(onClick = { activeOverlay = ActiveOverlay.APP_SETTINGS }) {
+                            IconButton(
+                                onClick = { activeOverlay = ActiveOverlay.APP_SETTINGS },
+                                // sharedBounds MUSS vor groessenfixierenden Modifiern stehen,
+                                // sonst gibt es nichts mehr zu interpolieren.
+                                modifier = Modifier.sharedBounds(
+                                    sharedContentState = rememberSharedContentState("app-settings-bounds"),
+                                    animatedVisibilityScope = this@AnimatedVisibility,
+                                    boundsTransform = AppSettingsBounds,
+                                    resizeMode = AppSettingsResize
+                                )
+                            ) {
                                 Icon(Icons.Filled.Settings, contentDescription = "App-Einstellungen")
                             }
                         },
@@ -342,13 +358,15 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
+                    // sharedBounds vor fillMaxSize: sonst ist die Groesse von aussen
+                    // fixiert und es bleibt nichts zu interpolieren.
                     .sharedBounds(
                         sharedContentState = rememberSharedContentState(
                             if (updateFromBanner) "update-banner-bounds" else "update-button-bounds"
                         ),
                         animatedVisibilityScope = this@AnimatedVisibility
                     )
+                    .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surface)
             ) {
                 FirmwareUpdateScreen(onBack = { activeOverlay = null }, store = store)
@@ -363,11 +381,11 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
                     .sharedBounds(
                         sharedContentState = rememberSharedContentState("service-bounds"),
                         animatedVisibilityScope = this@AnimatedVisibility
                     )
+                    .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surface)
             ) {
                 CustomizeServiceScreen(onBack = { activeOverlay = null }, store = store)
@@ -382,11 +400,11 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
                     .sharedBounds(
                         sharedContentState = rememberSharedContentState("settings-bounds"),
                         animatedVisibilityScope = this@AnimatedVisibility
                     )
+                    .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surface)
             ) {
                 DeviceSettingsScreen(onBack = { activeOverlay = null })
@@ -401,11 +419,11 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
                     .sharedBounds(
                         sharedContentState = rememberSharedContentState("intercom-bounds"),
                         animatedVisibilityScope = this@AnimatedVisibility
                     )
+                    .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surface)
             ) {
                 Scaffold(
@@ -555,21 +573,20 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
         // ── App settings overlay ────────────────────────────────────────
         AnimatedVisibility(
             visible = activeOverlay == ActiveOverlay.APP_SETTINGS,
-            // Zieht sich aus dem Zahnrad oben rechts auf. Der Screen startet bei 85 %
-            // Groesse - darunter wirkt der Inhalt bei Vollbild-Overlays gestaucht.
-            enter = scaleIn(
-                animationSpec = tween(320, easing = FastOutSlowInEasing),
-                initialScale = 0.85f,
-                transformOrigin = AppSettingsOrigin
-            ) + fadeIn(tween(220)),
-            exit = scaleOut(
-                animationSpec = tween(240, easing = FastOutSlowInEasing),
-                targetScale = 0.85f,
-                transformOrigin = AppSettingsOrigin
-            ) + fadeOut(tween(180))
+            // Auf die Dauer des Morphs abgestimmt, sonst wird der Inhalt entfernt,
+            // bevor die Bounds-Animation durchgelaufen ist.
+            enter = fadeIn(tween(420)),
+            exit = fadeOut(tween(420))
         ) {
             Box(
                 modifier = Modifier
+                    // Reihenfolge ist entscheidend: erst sharedBounds, dann fillMaxSize.
+                    .sharedBounds(
+                        sharedContentState = rememberSharedContentState("app-settings-bounds"),
+                        animatedVisibilityScope = this@AnimatedVisibility,
+                        boundsTransform = AppSettingsBounds,
+                        resizeMode = AppSettingsResize
+                    )
                     .fillMaxSize()
                     .background(MaterialTheme.colorScheme.surface)
             ) {

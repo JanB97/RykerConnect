@@ -95,12 +95,14 @@ fun ServiceCard(
                 FilledTonalButton(
                     onClick = customizeClick,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
+                        // sharedBounds vor fillMaxWidth, sonst steht die Groesse schon fest
+                        // und der Uebergang kann nichts interpolieren.
                         .sharedBounds(
                             sharedContentState = rememberSharedContentState("service-bounds"),
                             animatedVisibilityScope = animatedVisibilityScope
                         )
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
                 ) {
                     Text(text = "Manage & Customize")
                 }
