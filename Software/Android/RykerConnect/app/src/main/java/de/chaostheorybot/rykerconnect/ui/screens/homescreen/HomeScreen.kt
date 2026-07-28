@@ -5,8 +5,12 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -27,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
@@ -51,6 +56,12 @@ import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.DeviceSettingsSc
 import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.FirmwareUpdateScreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+
+/**
+ * Ursprung der App-Menue-Animation: oben rechts, wo das Zahnrad sitzt.
+ * Damit zieht sich der Screen aus dem Button auf, statt einfach einzublenden.
+ */
+private val AppSettingsOrigin = TransformOrigin(pivotFractionX = 1f, pivotFractionY = 0f)
 
 // SETTINGS = Geraeteeinstellungen der Haupteinheit, APP_SETTINGS = Einstellungen der App.
 private enum class ActiveOverlay { UPDATE, SERVICE, INTERCOM, SETTINGS, APP_SETTINGS }
@@ -252,14 +263,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
                     CenterAlignedTopAppBar(
                         title = { Text(text = stringResource(id = R.string.app_name), style = MaterialTheme.typography.headlineMedium) },
                         actions = {
-                            IconButton(
-                                onClick = { activeOverlay = ActiveOverlay.APP_SETTINGS },
-                                // Gegenstueck zum Overlay: das Zahnrad morpht in den Screen.
-                                modifier = Modifier.sharedBounds(
-                                    sharedContentState = rememberSharedContentState("app-settings-bounds"),
-                                    animatedVisibilityScope = this@AnimatedVisibility
-                                )
-                            ) {
+                            IconButton(onClick = { activeOverlay = ActiveOverlay.APP_SETTINGS }) {
                                 Icon(Icons.Filled.Settings, contentDescription = "App-Einstellungen")
                             }
                         },
@@ -551,16 +555,22 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(), nav: NavController,
         // ── App settings overlay ────────────────────────────────────────
         AnimatedVisibility(
             visible = activeOverlay == ActiveOverlay.APP_SETTINGS,
-            enter = fadeIn(),
-            exit = fadeOut()
+            // Zieht sich aus dem Zahnrad oben rechts auf. Der Screen startet bei 85 %
+            // Groesse - darunter wirkt der Inhalt bei Vollbild-Overlays gestaucht.
+            enter = scaleIn(
+                animationSpec = tween(320, easing = FastOutSlowInEasing),
+                initialScale = 0.85f,
+                transformOrigin = AppSettingsOrigin
+            ) + fadeIn(tween(220)),
+            exit = scaleOut(
+                animationSpec = tween(240, easing = FastOutSlowInEasing),
+                targetScale = 0.85f,
+                transformOrigin = AppSettingsOrigin
+            ) + fadeOut(tween(180))
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .sharedBounds(
-                        sharedContentState = rememberSharedContentState("app-settings-bounds"),
-                        animatedVisibilityScope = this@AnimatedVisibility
-                    )
                     .background(MaterialTheme.colorScheme.surface)
             ) {
                 AppSettingsScreen(onBack = { activeOverlay = null }, store = store)
