@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import de.chaostheorybot.rykerconnect.R
+import de.chaostheorybot.rykerconnect.ui.screens.homescreen.OverlayBounds
 import de.chaostheorybot.rykerconnect.ui.screens.homescreen.getBatteryIcon
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -236,7 +237,8 @@ fun IntercomCard(
                         .padding(start = 4.dp, bottom = 1.dp)
                         .sharedBounds(
                             sharedContentState = rememberSharedContentState("intercom-bounds"),
-                            animatedVisibilityScope = animatedVisibilityScope
+                            animatedVisibilityScope = animatedVisibilityScope,
+                            boundsTransform = OverlayBounds
                         )
                 ) {
                     Text(text = stringResource(id = R.string.str_sel_device))

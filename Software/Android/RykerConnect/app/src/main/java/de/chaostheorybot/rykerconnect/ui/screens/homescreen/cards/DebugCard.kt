@@ -67,15 +67,16 @@ fun DebugCard(title: String?,
     )
     {
         Column(
-            modifier = Modifier
-                .padding(all = 12.dp)
-                .fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth(),
             Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { expanded = !expanded },
+                    .clickable { expanded = !expanded }
+                    // Padding INNERHALB des clickable: sonst bleibt die Hervorhebung
+                    // ein Kaestchen um Text und Pfeil statt die Karte auszufuellen.
+                    .padding(all = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -91,7 +92,12 @@ fun DebugCard(title: String?,
                 enter = expandVertically(),
                 exit = shrinkVertically()
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    // Das Padding der Karte lag frueher aussen an der Column und gilt
+                    // jetzt nur noch fuer den aufgeklappten Inhalt.
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Spacer(modifier = Modifier.height(2.dp))
                     DebugMedia(title = title, artist = artist, playstate = playstate, tracklength = tracklength, trackposition = trackposition)
                     

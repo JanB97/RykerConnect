@@ -1,7 +1,8 @@
 package de.chaostheorybot.rykerconnect.ui.screens.homescreen
 
 import android.util.Log
-import androidx.activity.compose.BackHandler
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.BoundsTransform
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -53,16 +54,12 @@ import de.chaostheorybot.rykerconnect.ui.screens.servicescreen.CustomizeServiceS
 import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.AppSettingsScreen
 import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.DeviceSettingsScreen
 import de.chaostheorybot.rykerconnect.ui.screens.settingsscreen.FirmwareUpdateScreen
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
-
-/** Lange, gleichmaessige Kurve - ein 48-dp-Icon auf Vollbild braucht sichtbare Zeit. */
-private val AppSettingsBounds = BoundsTransform { _, _ ->
-    tween(durationMillis = 420, easing = FastOutSlowInEasing)
-}
 
 /** Crop verhindert, dass der Screen bei diesem Groessenunterschied zum Streifen gestaucht wird. */
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -250,15 +247,34 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(),
         installedFwVersion != null && latestFwVersion != null && installedFwVersion != latestFwVersion
     }
 
-    BackHandler(enabled = activeOverlay != null) {
-        activeOverlay = null
+    // Predictive Back: waehrend der Zurueckgeste schrumpft das Overlay mit dem
+    // Fortschritt, sodass der Startbildschirm dahinter durchscheint. Bricht der Nutzer
+    // ab, faehrt es zurueck; wird die Geste vollendet, uebernimmt der normale Morph.
+    var backProgress by remember { mutableFloatStateOf(0f) }
+    var backSwipeEdge by remember { mutableIntStateOf(BackEventCompat.EDGE_LEFT) }
+
+    PredictiveBackHandler(enabled = activeOverlay != null) { progress ->
+        try {
+            progress.collect { event ->
+                backProgress = event.progress
+                backSwipeEdge = event.swipeEdge
+            }
+            // Geste vollendet
+            activeOverlay = null
+            backProgress = 0f
+        } catch (_: CancellationException) {
+            // Geste abgebrochen - Overlay bleibt offen
+            backProgress = 0f
+        }
     }
 
     SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
 
         // ── Main content ────────────────────────────────────────────────
         AnimatedVisibility(
-            visible = activeOverlay == null,
+            // Waehrend der Zurueckgeste mitkomponieren, damit hinter dem schrumpfenden
+            // Overlay der Startbildschirm sichtbar wird statt schwarzer Flaeche.
+            visible = activeOverlay == null || backProgress > 0f,
             enter = fadeIn(),
             exit = fadeOut()
         ) {
@@ -368,6 +384,7 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(),
                         animatedVisibilityScope = this@AnimatedVisibility
                     )
                     .fillMaxSize()
+                    .predictiveBackPeek({ backProgress }, { backSwipeEdge })
                     .background(MaterialTheme.colorScheme.surface)
             ) {
                 FirmwareUpdateScreen(onBack = { activeOverlay = null }, store = store)
@@ -385,12 +402,14 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(),
                     .sharedBounds(
                         sharedContentState = rememberSharedContentState("service-bounds"),
                         animatedVisibilityScope = this@AnimatedVisibility,
-                        // Inhalt verzoegert und laenger einblenden, waehrend die Flaeche
-                        // aufzieht. Mit dem Default steht der Screen sofort scharf da.
-                        enter = fadeIn(tween(340, delayMillis = 110)),
-                        exit = fadeOut(tween(200))
+                        boundsTransform = OverlayBounds,
+                        // Inhalt verzoegert einblenden, waehrend die Flaeche aufzieht.
+                        // Mit dem Default steht der Screen sofort scharf da.
+                        enter = fadeIn(tween(260, delayMillis = 80)),
+                        exit = fadeOut(tween(170))
                     )
                     .fillMaxSize()
+                    .predictiveBackPeek({ backProgress }, { backSwipeEdge })
                     .background(MaterialTheme.colorScheme.surface)
             ) {
                 CustomizeServiceScreen(onBack = { activeOverlay = null }, store = store)
@@ -426,9 +445,11 @@ fun HomeScreen(viewModel: HomeViewModel = viewModel(),
                 modifier = Modifier
                     .sharedBounds(
                         sharedContentState = rememberSharedContentState("intercom-bounds"),
-                        animatedVisibilityScope = this@AnimatedVisibility
+                        animatedVisibilityScope = this@AnimatedVisibility,
+                        boundsTransform = OverlayBounds
                     )
                     .fillMaxSize()
+                    .predictiveBackPeek({ backProgress }, { backSwipeEdge })
                     .background(MaterialTheme.colorScheme.surface)
             ) {
                 Scaffold(

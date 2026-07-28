@@ -125,9 +125,9 @@ class RykerDeviceService : CompanionDeviceService() {
             // Disconnect orphaned old connection before creating a new one
             existing?.disconnect()
 
-            // Read service toggles. Der Intercom-Schalter fehlt hier bewusst: die
+            // Read service toggles. Der Intercom-Schalter fehlt hier bewusst: Die
             // Akku-Schleife startet in der zweiten Coroutine weiter unten und liest
-            // ihn dort selbst - eine lokale Kopie waere fuer sie nicht sichtbar.
+            // ihn dort selbst - eine lokale Kopie wäre für sie nicht sichtbar.
             val musicEnabled = store.isMusicEnabled()
             val volumeEnabled = store.isVolumeEnabled()
 

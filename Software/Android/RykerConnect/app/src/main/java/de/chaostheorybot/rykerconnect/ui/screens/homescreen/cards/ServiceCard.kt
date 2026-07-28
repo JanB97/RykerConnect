@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import de.chaostheorybot.rykerconnect.R
+import de.chaostheorybot.rykerconnect.ui.screens.homescreen.OverlayBounds
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -103,10 +104,11 @@ fun ServiceCard(
                         .sharedBounds(
                             sharedContentState = rememberSharedContentState("service-bounds"),
                             animatedVisibilityScope = animatedVisibilityScope,
+                            boundsTransform = OverlayBounds,
                             // Button-Beschriftung frueh und weich ausblenden, sonst steht sie
                             // hart im wachsenden Container.
-                            exit = fadeOut(tween(180)),
-                            enter = fadeIn(tween(200, delayMillis = 220))
+                            exit = fadeOut(tween(150)),
+                            enter = fadeIn(tween(170, delayMillis = 180))
                         )
                         .fillMaxWidth()
                         .padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
